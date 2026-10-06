@@ -252,3 +252,33 @@ fn protected_islands_do_not_hide_unrelated_work_in_the_same_paragraph() {
             .any(|f| f.rule == "reader.result_location")
     );
 }
+
+#[test]
+fn utf8_bom_is_metadata_but_locations_refer_to_the_original_source() {
+    let text = "\u{feff}状態: 完了。\nテストは未完了です。";
+    let result = analyze(text).unwrap();
+    assert!(
+        result
+            .findings
+            .iter()
+            .any(|f| f.rule == "reader.status_alignment")
+    );
+    let text = "\u{feff}既定の保存先です。";
+    let result = analyze(text).unwrap();
+    let f = &result.findings[0];
+    assert_eq!(f.start.byte, 3);
+    assert_eq!(f.start.character, 1);
+    assert_eq!(f.start.column, 2);
+    assert_eq!(&text[f.start.byte..f.end.byte], "既定");
+    assert_eq!(
+        result.metrics.visible_characters,
+        "既定の保存先です。".chars().count()
+    );
+    assert!(
+        analyze("\u{feff}---\ntitle: 既定\n---\n保存しました。")
+            .unwrap()
+            .findings
+            .is_empty()
+    );
+    assert_eq!(plan(text, "").unwrap()["original"], text);
+}
