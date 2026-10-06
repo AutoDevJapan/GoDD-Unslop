@@ -1,0 +1,38 @@
+[
+  {
+    "id": "owner-feedback-text",
+    "authorship": "human",
+    "genre": "オーナーの改善指示",
+    "source_kind": "owner_statement",
+    "source_date": "2026-10-04",
+    "authorship_basis": "オーナーが今回提供した本人発言と、保存された本人のDiscord指摘を照合。",
+    "raw_body_published": false
+  },
+  {
+    "id": "owner-feedback-topics",
+    "authorship": "human",
+    "genre": "オーナーの改善指示",
+    "source_kind": "owner_statement",
+    "source_date": "2026-10-04",
+    "authorship_basis": "オーナーが今回提供した本人発言と、保存された本人のDiscord指摘を照合。",
+    "raw_body_published": false
+  },
+  {
+    "id": "owner-feedback-context",
+    "authorship": "human",
+    "genre": "オーナーの改善指示",
+    "source_kind": "owner_statement",
+    "source_date": "2026-10-02",
+    "authorship_basis": "オーナーが今回提供した本人発言と、保存された本人のDiscord指摘を照合。",
+    "raw_body_published": false
+  },
+  {
+    "id": "owner-feedback-comprehension",
+    "authorship": "human",
+    "genre": "オーナーの改善指示",
+    "source_kind": "owner_statement",
+    "source_date": "2026-10-05",
+    "authorship_basis": "オーナーが今回提供した本人発言と、保存された本人のDiscord指摘を照合。",
+    "raw_body_published": false
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ai-draft-result",
+    "authorship": "ai",
+    "source_kind": "new_synthetic",
+    "generator": "Codex gpt-6.1-sol",
+    "genre": "進捗報告",
+    "generated_at": "2026-10-06T10:02:10.3361445Z",
+    "purpose": "オーナーが指摘した問題を検査するため、現在のジョブが新しく作成。独立した評価セットではない。",
+    "raw_body_published": false
+  },
+  {
+    "id": "ai-draft-terms",
+    "authorship": "ai",
+    "source_kind": "new_synthetic",
+    "generator": "Codex gpt-6.1-sol",
+    "genre": "操作の説明",
+    "generated_at": "2026-10-06T10:02:10.3403465Z",
+    "purpose": "オーナーが指摘した問題を検査するため、現在のジョブが新しく作成。独立した評価セットではない。",
+    "raw_body_published": false
+  },
+  {
+    "id": "ai-draft-nouns",
+    "authorship": "ai",
+    "source_kind": "new_synthetic",
+    "generator": "Codex gpt-6.1-sol",
+    "genre": "業務の説明",
+    "generated_at": "2026-10-06T10:02:10.3405845Z",
+    "purpose": "オーナーが指摘した問題を検査するため、現在のジョブが新しく作成。独立した評価セットではない。",
+    "raw_body_published": false
+  },
+  {
+    "id": "ai-draft-status",
+    "authorship": "ai",
+    "source_kind": "new_synthetic",
+    "generator": "Codex gpt-6.1-sol",
+    "genre": "進捗報告",
+    "generated_at": "2026-10-06T10:02:10.3406896Z",
+    "purpose": "オーナーが指摘した問題を検査するため、現在のジョブが新しく作成。独立した評価セットではない。",
+    "raw_body_published": false
+  }
+]
