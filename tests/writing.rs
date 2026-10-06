@@ -223,3 +223,32 @@ fn status_check_is_prioritized_and_understands_heading_and_wide_colon() {
             .any(|f| f.rule == "reader.status_alignment")
     );
 }
+
+#[test]
+fn protected_islands_do_not_hide_unrelated_work_in_the_same_paragraph() {
+    for text in [
+        "状態: 完了\n\nテストは未完了です。詳細は https://ci.example/run/1 を参照。",
+        "状態: 完了\n\n「確認」は未完了です。",
+        "状態: 完了\n\n「既定の確認」はまだ実行していません。",
+    ] {
+        let report = analyze(text).unwrap();
+        let hit = report
+            .findings
+            .iter()
+            .find(|f| f.rule == "reader.status_alignment")
+            .unwrap();
+        assert!(["未完了", "まだ実行していません"].contains(&&text[hit.start.byte..hit.end.byte]));
+        assert!(
+            !report
+                .findings
+                .iter()
+                .any(|f| f.rule == "reader.ambiguous_term")
+        );
+    }
+    let lead = analyze("背景として「資料」を説明します。修正は完了しました。").unwrap();
+    assert!(
+        lead.findings
+            .iter()
+            .any(|f| f.rule == "reader.result_location")
+    );
+}

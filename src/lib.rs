@@ -166,21 +166,40 @@ fn visible(text: &str) -> String {
 fn overlaps(a: &Range<usize>, b: &Range<usize>) -> bool {
     a.start < b.end && b.start < a.end
 }
+/// Remove protected islands before rule matching rather than discarding a whole finding.
+fn editable_ranges(ranges: Vec<Range<usize>>, protected: &mut [Range<usize>]) -> Vec<Range<usize>> {
+    protected.sort_by_key(|range| range.start);
+    let mut editable = Vec::new();
+    for range in ranges {
+        let mut cursor = range.start;
+        for island in protected.iter().filter(|island| overlaps(&range, island)) {
+            if island.start > cursor {
+                editable.push(cursor..island.start.min(range.end));
+            }
+            cursor = cursor.max(island.end.min(range.end));
+            if cursor == range.end {
+                break;
+            }
+        }
+        if cursor < range.end {
+            editable.push(cursor..range.end);
+        }
+    }
+    editable
+}
 
 pub fn analyze(text: &str) -> Result<Analysis, Error> {
     check(text)?;
     let (prose, headings, lists, strong_spans) = prose_ranges(text);
-    let quotes: Vec<_> = quote_re()
+    let mut quotes: Vec<_> = quote_re()
         .find_iter(text)
         .chain(url_re().find_iter(text))
         .map(|m| m.range())
         .collect();
+    let prose = editable_ranges(prose, &mut quotes);
     let mut findings = Vec::new();
     let mut limited = false;
     let mut add = |range: Range<usize>, rule: &str, why: &str, action: &str| {
-        if quotes.iter().any(|q| overlaps(&range, q)) {
-            return;
-        }
         if findings.len() >= MAX_FINDINGS {
             limited = true;
             return;
@@ -201,16 +220,15 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
     {
         for r in &prose {
             let s = &text[r.clone()];
-            if s.contains("未完了")
-                || s.contains("まだ実行していません")
-                || s.contains("これから確認")
-            {
-                add(
-                    r.clone(),
-                    "reader.status_alignment",
-                    "完了のラベルと本文の残作業を照合してください。",
-                    "完了条件を満たした範囲と、残っている作業を分けて状態を示してください。",
-                );
+            for marker in ["未完了", "まだ実行していません", "これから確認"] {
+                for (at, _) in s.match_indices(marker) {
+                    add(
+                        r.start + at..r.start + at + marker.len(),
+                        "reader.status_alignment",
+                        "完了のラベルと本文の残作業を照合してください。",
+                        "完了条件を満たした範囲と、残っている作業を分けて状態を示してください。",
+                    );
+                }
             }
         }
     }
@@ -329,7 +347,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
 }
 
 pub fn features() -> Value {
-    json!({"version":env!("CARGO_PKG_VERSION"),"max_text_bytes":MAX_TEXT_BYTES,"automatic_rewrite":false,"authorship_detection":false,"rules":["reader.result_location","reader.identifier_meaning","reader.ambiguous_term","reader.noun_relationship","reader.action_visibility","reader.long_relationship","reader.status_alignment"],"metrics":["visible_characters","sentence_lengths","comma_count","kanji_ratio","headings","lists","strong_spans"]})
+    json!({"version":env!("CARGO_PKG_VERSION"),"max_text_bytes":MAX_TEXT_BYTES,"automatic_rewrite":false,"authorship_detection":false,"rules":["reader.result_location","reader.identifier_meaning","reader.ambiguous_term","reader.noun_relationship","reader.action_visibility","reader.long_relationship","reader.status_alignment"],"metrics":["visible_characters","sentence_units","sentence_lengths","mean_sentence_length","comma_count","kanji_count","kanji_ratio","headings","lists","strong_spans"]})
 }
 pub fn plan(text: &str, context: &str) -> Result<Value, Error> {
     check(context)?;

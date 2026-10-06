@@ -700,5 +700,6 @@
     }
   ],
   "method": "Rust features tool; four newly fetched public pages (authorship unknown), four AI synthetic drafts, four owner feedback statements supplied directly by the owner or verified in saved Discord. Groups differ in genre and length. Not a classifier, benchmark accuracy claim, or calibrated threshold.",
-  "schema_version": 1
+  "schema_version": 1,
+  "feature_engine_commit": "3444df49246ed29b54eb642a7348b69d12d485f7"
 }
