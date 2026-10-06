@@ -75,12 +75,14 @@ fn check(text: &str) -> Result<(), Error> {
 fn numeric_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        regex::Regex::new(r"[0-9０-９]+(?:[.,．][0-9０-９]+)*").expect("constant numeric pattern")
+        regex::Regex::new(r"[+-]?[0-9０-９一二三四五六七八九十百千万億兆〇零]+(?:[.,．][0-9０-９]+)*(?:時間|秒|分|日|年|月|円|回|件|人|個|匹|本|枚|台|%|％)*(?:以上|以下|未満|超)?").expect("constant numeric pattern")
     })
 }
 fn quote_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| regex::Regex::new("「[^」]*」|『[^』]*』").expect("constant quote pattern"))
+    RE.get_or_init(|| {
+        regex::Regex::new("「[^」\\r\\n]*」|『[^』\\r\\n]*』").expect("constant quote pattern")
+    })
 }
 fn parser(text: &str) -> Parser<'_> {
     Parser::new_ext(
@@ -97,7 +99,10 @@ fn identifiers() -> &'static regex::Regex {
 }
 fn url_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| regex::Regex::new(r"https?://[^\s<>]+").expect("constant URL pattern"))
+    RE.get_or_init(|| {
+        regex::Regex::new(r#"https?://[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+"#)
+            .expect("constant ASCII URL pattern")
+    })
 }
 fn kanji_run_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
@@ -188,8 +193,30 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
             review_action: action.into(),
         });
     };
+    let plain = visible(text);
+    if plain
+        .lines()
+        .next()
+        .is_some_and(|line| line.starts_with("状態: 完了") || line.starts_with("状態：完了"))
+    {
+        for r in &prose {
+            let s = &text[r.clone()];
+            if s.contains("未完了")
+                || s.contains("まだ実行していません")
+                || s.contains("これから確認")
+            {
+                add(
+                    r.clone(),
+                    "reader.status_alignment",
+                    "完了のラベルと本文の残作業を照合してください。",
+                    "完了条件を満たした範囲と、残っている作業を分けて状態を示してください。",
+                );
+            }
+        }
+    }
     for range in &prose {
         let s = &text[range.clone()];
+        let character_length = s.chars().count();
         for m in kanji_run_re().find_iter(s) {
             add(
                 range.start + m.start()..range.start + m.end(),
@@ -199,7 +226,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
             );
         }
         for m in identifiers().find_iter(s) {
-            if s.chars().count() < 32 {
+            if character_length < 32 {
                 add(
                     range.start + m.start()..range.start + m.end(),
                     "reader.identifier_meaning",
@@ -218,7 +245,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
                 );
             }
         }
-        if s.matches('の').count() >= 4 && s.chars().count() >= 24 {
+        if s.matches('の').count() >= 4 && character_length >= 24 {
             add(
                 range.clone(),
                 "reader.noun_relationship",
@@ -260,24 +287,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
             "必要な操作と結果を最初に置けるか確認してください。前提を先に伝える必要がある文は残してください。",
         );
     }
-    if lead.starts_with("状態: 完了") {
-        for r in &prose {
-            let s = &text[r.clone()];
-            if s.contains("未完了")
-                || s.contains("まだ実行していません")
-                || s.contains("これから確認")
-            {
-                add(
-                    r.clone(),
-                    "reader.status_alignment",
-                    "完了のラベルと本文の残作業を照合してください。",
-                    "完了条件を満たした範囲と、残っている作業を分けて状態を示してください。",
-                );
-            }
-        }
-    }
     findings.sort_by_key(|f| (f.start.byte, f.end.byte));
-    let plain = visible(text);
     let chars = plain.chars().filter(|c| !c.is_whitespace()).count();
     let sentence_lengths: Vec<usize> = plain
         .split(['。', '！', '？', '\n'])
@@ -335,12 +345,11 @@ pub fn plan(text: &str, context: &str) -> Result<Value, Error> {
         ]}),
     )
 }
-fn tokens(text: &str) -> BTreeMap<String, usize> {
-    let mut values = BTreeMap::new();
-    for m in numeric_re().find_iter(text) {
-        *values.entry(m.as_str().into()).or_insert(0) += 1;
-    }
-    values
+fn numeric_fragments(text: &str) -> Vec<String> {
+    numeric_re()
+        .find_iter(text)
+        .map(|m| m.as_str().to_owned())
+        .collect()
 }
 fn meaning_markers(text: &str) -> BTreeMap<&'static str, usize> {
     [
@@ -387,8 +396,9 @@ pub fn compare(original: &str, rewrite: &str) -> Result<Value, Error> {
     }
     Ok(
         json!({"changed":original != rewrite,"changed_region":{"original_start":locate(original,prefix),"original_end":locate(original,o_end),"rewrite_start":locate(rewrite,prefix),"rewrite_end":locate(rewrite,r_end)},
-        "numbers_changed":tokens(original)!=tokens(rewrite),"original_numbers":tokens(original),"rewrite_numbers":tokens(rewrite),
-        "meaning_marker_counts_changed":meaning_markers(original)!=meaning_markers(rewrite),"original_markers":meaning_markers(original),"rewrite_markers":meaning_markers(rewrite),
+        "numeric_fragments_changed":numeric_fragments(original)!=numeric_fragments(rewrite),"numeric_fragments_original":numeric_fragments(original),"numeric_fragments_rewrite":numeric_fragments(rewrite),
+        "listed_marker_counts_changed":meaning_markers(original)!=meaning_markers(rewrite),"original_markers":meaning_markers(original),"rewrite_markers":meaning_markers(rewrite),
+        "comparison_scope":"数字・漢数字と列挙した直後の単位・比較語を出現順で照合します。数量表現を網羅しません。語の件数は列挙した語だけで、意味の保持を確定しません。",
         "original_analysis":analyze(original)?,"rewrite_analysis":analyze(rewrite)?,"semantic_equality":"not_established","review":"差分は一つの外側範囲です。語の数が同じでも条件や主体が変わることがあります。原文と全文を照合してください。"}),
     )
 }

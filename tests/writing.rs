@@ -20,7 +20,7 @@ fn source_literals_are_not_reviewed_as_prose() {
         "~~~\nフォールバック\n~~~",
         "`既定`",
         "[保存先](https://example.test/既定)",
-        "https://example.test/ローカル",
+        "<https://example.test/ローカル>",
         "> 既定では見送り。",
         "「既定の保存先」について尋ねた。",
         "---\ntitle: 既定\n---\n保存しました。",
@@ -88,8 +88,8 @@ fn parser_feature_counts_have_explicit_units() {
 #[test]
 fn comparisons_never_certify_semantic_equivalence() {
     let result = compare("失敗した場合だけ、3回再送してください。", "5回再送します。").unwrap();
-    assert_eq!(result["numbers_changed"], true);
-    assert_eq!(result["meaning_marker_counts_changed"], true);
+    assert_eq!(result["numeric_fragments_changed"], true);
+    assert_eq!(result["listed_marker_counts_changed"], true);
     assert_eq!(result["semantic_equality"], "not_established");
     assert_eq!(result["changed_region"]["original_start"]["byte"], 0);
     let equal = compare("保存しました。", "保存しました。").unwrap();
@@ -144,4 +144,82 @@ fn finding_volume_is_bounded_and_declared() {
     let report = analyze(&"既定です。 ".repeat(300)).unwrap();
     assert_eq!(report.findings.len(), 128);
     assert!(report.findings_limited);
+}
+
+#[test]
+fn a_url_does_not_silence_following_japanese() {
+    let text = "詳細はhttps://x.test/aを見てください。既定の設定です。";
+    let hit = analyze(text)
+        .unwrap()
+        .findings
+        .into_iter()
+        .find(|f| f.rule == "reader.ambiguous_term")
+        .unwrap();
+    assert_eq!(&text[hit.start.byte..hit.end.byte], "既定");
+    assert!(
+        analyze("<https://x.test/既定>")
+            .unwrap()
+            .findings
+            .is_empty()
+    );
+    assert!(
+        analyze("[案内](https://x.test/既定)")
+            .unwrap()
+            .findings
+            .is_empty()
+    );
+}
+
+#[test]
+fn numeric_order_units_kanji_signs_and_bounds_are_candidates() {
+    for (before, after) in [
+        ("3回失敗したら5回再送。", "5回失敗したら3回再送。"),
+        ("3日待ちます。", "3時間待ちます。"),
+        ("三回です。", "五回です。"),
+        ("3回以上です。", "3回以下です。"),
+        ("金額は-500円。", "金額は500円。"),
+    ] {
+        let result = compare(before, after).unwrap();
+        assert_eq!(
+            result["numeric_fragments_changed"], true,
+            "{before} -> {after}"
+        );
+        assert_eq!(result["semantic_equality"], "not_established");
+    }
+    let not_covered = compare("3kgです。", "3gです。").unwrap();
+    assert_eq!(not_covered["changed"], true);
+    assert_eq!(not_covered["numeric_fragments_changed"], false);
+    assert!(
+        not_covered["comparison_scope"]
+            .as_str()
+            .unwrap()
+            .contains("網羅しません")
+    );
+}
+
+#[test]
+fn a_missing_quote_does_not_hide_other_paragraphs() {
+    let report = analyze("「途中の文\n\n既定の保存先です。\n\n引用の終わり。」").unwrap();
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.rule == "reader.ambiguous_term")
+    );
+}
+
+#[test]
+fn status_check_is_prioritized_and_understands_heading_and_wide_colon() {
+    let text = format!(
+        "# 状態：完了\n\n{}\n\nテストは未完了です。",
+        "既定です。 ".repeat(200)
+    );
+    let result = analyze(&text).unwrap();
+    assert!(result.findings_limited);
+    assert!(
+        result
+            .findings
+            .iter()
+            .any(|f| f.rule == "reader.status_alignment")
+    );
 }
