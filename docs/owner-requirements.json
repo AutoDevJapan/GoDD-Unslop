@@ -1,0 +1,79 @@
+{
+  "description": "オーナーの指示から抽象化した要件。元文章・会社名・顧客名・社内情報を含めない。",
+  "rules": [
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_supplied_in_session",
+      "source_date": "2026-09-30",
+      "id": "owner.result_first",
+      "correction": "結果と必要な操作を最初の文へ置く",
+      "problem": "結果や依頼を読むまで背景の説明が続く"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_supplied_in_session",
+      "source_date": "2026-09-30",
+      "id": "owner.explain_terms",
+      "correction": "読み手に見える動作や結果を具体的な語で説明する",
+      "problem": "内部の記号だけでは何が起きたか分からない"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_supplied_in_session",
+      "source_date": "2026-09-30",
+      "id": "owner.noun_chains",
+      "correction": "確定している主体と動作の関係を動詞で書く",
+      "problem": "名詞が続き、誰が何をするか読めない"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_supplied_in_session",
+      "source_date": "2026-09-30",
+      "id": "owner.ambiguous_terms",
+      "correction": "使う語が指す内容を文脈で明らかにする",
+      "problem": "同じ語が読み手によって別の意味に読める"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_supplied_in_session",
+      "source_date": "2026-10-04",
+      "id": "owner.match_status",
+      "correction": "確認した完了条件に合わせて状態を示す",
+      "problem": "完了のラベルと未完了の本文が一致しない"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_and_verified_discord",
+      "source_date": "2026-10-04",
+      "id": "owner.separate_topics",
+      "correction": "報告を製品ごとに分け、共通欄は短いまとめとリンクにする",
+      "problem": "製品ごとの報告が一つの場所に混ざる"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_and_verified_discord",
+      "source_date": "2026-10-02",
+      "id": "owner.clear_request",
+      "correction": "案件と起きたこと、判断すると変わる内容を最初に示す",
+      "problem": "質問の意味や判断の対象を理解できない"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_supplied_in_session",
+      "source_date": "2026-10-04",
+      "id": "owner.direct_text",
+      "correction": "短い文章はメッセージ本文に書き、長いときは分ける",
+      "problem": "文章のファイルが読めず、伝達の負担が増える"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction_and_verified_discord",
+      "source_date": "2026-10-05",
+      "id": "owner.design_before_ui",
+      "scope": "将来のUI工程。文章のAI判定に転用しない",
+      "correction": "画面やキャラクターを先に画像で提案し、方向を決めてから実装する",
+      "problem": "汎用的な見た目では製品を使う気にならない"
+    }
+  ],
+  "schema_version": 1
+}
