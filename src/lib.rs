@@ -86,7 +86,7 @@ fn quote_re() -> &'static regex::Regex {
 }
 fn parser(text: &str) -> Parser<'_> {
     Parser::new_ext(
-        text,
+        text.strip_prefix('\u{feff}').unwrap_or(text),
         Options::ENABLE_YAML_STYLE_METADATA_BLOCKS
             | Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS,
     )
@@ -112,6 +112,11 @@ fn kanji_run_re() -> &'static regex::Regex {
 /// CommonMark provides source ranges. Code, links, quotations and headings are not edited.
 fn prose_ranges(text: &str) -> (Vec<Range<usize>>, usize, usize, usize) {
     let mut ranges = Vec::new();
+    let prefix_bytes = if text.starts_with('\u{feff}') {
+        '\u{feff}'.len_utf8()
+    } else {
+        0
+    };
     let (mut excluded, mut headings, mut lists, mut strong) = (0usize, 0, 0, 0);
     for (event, range) in parser(text).into_offset_iter() {
         match event {
@@ -137,7 +142,9 @@ fn prose_ranges(text: &str) -> (Vec<Range<usize>>, usize, usize, usize) {
                 | TagEnd::MetadataBlock(_)
                 | TagEnd::Heading(_),
             ) => excluded = excluded.saturating_sub(1),
-            Event::Text(_) if excluded == 0 => ranges.push(range),
+            Event::Text(_) if excluded == 0 => {
+                ranges.push(range.start + prefix_bytes..range.end + prefix_bytes)
+            }
             _ => {}
         }
     }
