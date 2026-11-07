@@ -237,7 +237,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
                     add(
                         r.start + at..r.start + at + marker.len(),
                         "reader.status_alignment",
-                        "完了のラベルと本文の残作業を照合してください。",
+                        "完了と示した範囲に、残っている作業が含まれていないか確認してください。",
                         "完了条件を満たした範囲と、残っている作業を分けて状態を示してください。",
                     );
                 }
@@ -251,7 +251,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
             add(
                 range.start + m.start()..range.start + m.end(),
                 "reader.noun_relationship",
-                "漢字が長く続いています。名前や専門語か、動作が名詞に埋もれた箇所かを確認します。",
+                "漢字が長く続いているため、名前や専門語なのか、動作を名詞で重ねた説明なのかを確認してください。",
                 "名前は保ち、動作の説明なら確定した主語と動詞で書けるか確認してください。",
             );
         }
@@ -260,7 +260,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
                 add(
                     range.start + m.start()..range.start + m.end(),
                     "reader.identifier_meaning",
-                    "短い説明で内部の番号を使っています。読み手が内容を分かるか確認します。",
+                    "短い説明で内部の番号を使っているため、読み手がその番号から内容を理解できるか確認してください。",
                     "参照番号を残しても、何を選ぶか、何が起きるかを具体的に添えてください。",
                 );
             }
@@ -279,18 +279,17 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
             add(
                 range.clone(),
                 "reader.noun_relationship",
-                "名詞の関係を読み戻す負担がないか確認する候補です。",
+                "名詞同士の関係を理解するために、読み戻す必要がないか確認してください。",
                 "確定している主体と動作を動詞で書けるか確認し、名前や引用は変えないでください。",
             );
         }
-        for marker in ["ご報告いたします", "推進してまいります", "展開を実施"]
-        {
+        for marker in ["推進してまいります", "展開を実施"] {
             for (at, _) in s.match_indices(marker) {
                 add(
                     range.start + at..range.start + at + marker.len(),
                     "reader.action_visibility",
-                    "書き手の態度より、実際の結果や操作を先に伝えられるか確認します。",
-                    "同じ事実を短い主語と動詞で伝えられるか検討してください。丁寧さが必要な文脈は保ってください。",
+                    "何を進めるのか、何を実行したのかが具体的に伝わるか確認してください。",
+                    "敬語かため口かは変えず、確定した主体と動作を具体的に示してください。",
                 );
             }
         }
@@ -301,7 +300,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
                     range.start + at..range.start + at + unit.len(),
                     "reader.long_relationship",
                     "長い文の中で条件と動作の対応を追えるか確認します。",
-                    "理由・条件・時系列を保てる場合にだけ分けてください。長さだけで情報を削らないでください。",
+                    "意味のつながる語句や節を保ち、話題や主体が変わる箇所で区切れるか確認してください。\n文字数だけを理由に分割したり、情報を削ったりしないでください。",
                 );
             }
         }
@@ -314,7 +313,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
             r.clone(),
             "reader.result_location",
             "結果や依頼より先に背景が続いていないか確認します。",
-            "必要な操作と結果を最初に置けるか確認してください。前提を先に伝える必要がある文は残してください。",
+            "読み手が知りたい結果や必要な操作を先に置けるか確認し、理解に欠かせない前提は保ってください。",
         );
     }
     findings.sort_by_key(|f| (f.start.byte, f.end.byte));
@@ -354,7 +353,7 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
         findings,
         findings_limited: limited,
         interpretation:
-            "指摘は読み手の負担を確認する候補です。作者が人間かAIか、意味が正しいかを判定しません。"
+            "指摘を手がかりに、文脈と読み手の負担を確認してください。\n作者が人間かAIか、意味が正しいかを確定する結果ではありません。"
                 .into(),
     })
 }
@@ -369,11 +368,11 @@ pub fn plan(text: &str, context: &str) -> Result<Value, Error> {
         json!({"original":text,"context":context,"analysis":report,"performs_rewrite":false,"steps":[
             "読み手、文章の目的、伝える結果、求める操作を提供された情報から確認する。",
             "元の事実、数量、期限、条件、例外、否定、比較の向き、確かさ、依頼や決定の強さを控える。",
-            "指摘が読みにくさを生むか前後を読んで確かめ、問題がある箇所だけを直す。自然な表現は残す。",
-            "何が起きるかを最初に伝えられるか検討する。主語と動作を分かる範囲で書き、内部の番号だけで説明しない。",
-            "分からない主体や理由を作らない。架空の実績や経験を足さず、未確定の点は未確定のまま示す。",
-            "敬語・ため口は評価せず、意味のつながる語句・節・文のまとまりを保つ。改行位置と空行による距離を別々に検討し、句点ごとの機械的な分割を避ける。",
-            "コード、URL、引用、名前、正確な値を保つ。改稿後に原文と見比べ、変わった意味を確認する。"
+            "指摘された箇所の前後を読み、理解を妨げる表現だけを直して自然な表現は残す。",
+            "読み手が知りたい結果や必要な操作を先に伝え、分かる範囲で主語と動作を具体的に示す。",
+            "分からない主体や理由、架空の実績や経験を補わず、未確定の点はそのまま示す。",
+            "敬語かため口かは評価せず、言葉や文節、節や連の意味のつながりを保つ。\nまとまりの境界で改行し、まとまり同士の距離を空行で示す。\n句点の数や文字数だけでは区切らない。",
+            "コード、URL、引用、名前、正確な値を保ったうえで、改稿と原文を見比べて意味の変化を確認する。"
         ]}),
     )
 }
@@ -430,12 +429,14 @@ pub fn compare(original: &str, rewrite: &str) -> Result<Value, Error> {
         json!({"changed":original != rewrite,"changed_region":{"original_start":locate(original,prefix),"original_end":locate(original,o_end),"rewrite_start":locate(rewrite,prefix),"rewrite_end":locate(rewrite,r_end)},
         "numeric_fragments_changed":numeric_fragments(original)!=numeric_fragments(rewrite),"numeric_fragments_original":numeric_fragments(original),"numeric_fragments_rewrite":numeric_fragments(rewrite),
         "listed_marker_counts_changed":meaning_markers(original)!=meaning_markers(rewrite),"original_markers":meaning_markers(original),"rewrite_markers":meaning_markers(rewrite),
-        "comparison_scope":"数字・漢数字と列挙した直後の単位・比較語を出現順で照合します。数量表現を網羅しません。語の件数は列挙した語だけで、意味の保持を確定しません。",
-        "original_analysis":analyze(original)?,"rewrite_analysis":analyze(rewrite)?,"semantic_equality":"not_established","review":"差分は一つの外側範囲です。語の数が同じでも条件や主体が変わることがあります。原文と全文を照合してください。"}),
+        "comparison_scope":"数字や漢数字と、その直後にある対応済みの単位・比較語を出現順に照合します。\n数量表現を網羅するものではなく、列挙した語の件数から意味が保たれたとも判定できません。",
+        "original_analysis":analyze(original)?,"rewrite_analysis":analyze(rewrite)?,"semantic_equality":"not_established","review":"差分は、変更箇所をすべて含む一つの範囲として示します。\n語の数が同じでも条件や主体が変わることがあるため、原文と改稿の全文を照合してください。"}),
     )
 }
 pub fn dispatch(input: &Value) -> Result<Value, Error> {
-    let obj = input.as_object().ok_or(Error("入力はJSON objectです。"))?;
+    let obj = input
+        .as_object()
+        .ok_or(Error("入力にはJSONオブジェクトを指定してください。"))?;
     let action = obj
         .get("action")
         .and_then(Value::as_str)
