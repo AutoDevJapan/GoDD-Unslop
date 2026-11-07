@@ -162,10 +162,7 @@ pub fn review(input: &Value) -> Result<Value, Error> {
 
     let mut seen = std::collections::BTreeSet::new();
     for r in &p.rules {
-        if !seen.insert(r.before.clone()) {
-            continue;
-        }
-        if r.kind == "layout" {
+        if r.kind == "layout" || !seen.insert(r.before.clone()) {
             continue;
         }
         if !eligible(&r.before) || !eligible(&r.after) {
@@ -186,7 +183,7 @@ pub fn review(input: &Value) -> Result<Value, Error> {
             let choices: std::collections::BTreeSet<_> = p
                 .rules
                 .iter()
-                .filter(|x| x.before == r.before)
+                .filter(|x| x.before == r.before && x.kind != "layout")
                 .map(|x| x.after.clone())
                 .collect();
             findings.push(json!({"choices":choices,"kind":if choices.len()>1 {"explicit_wording_conflict"} else {r.kind.as_str()},"start":crate::locate(text,start),"end":crate::locate(text,end),"suggestion":if choices.len()==1 {Some(r.after.as_str())} else {None},"basis":"明示修正の原文との完全一致です。"}));

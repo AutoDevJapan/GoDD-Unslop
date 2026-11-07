@@ -84,3 +84,20 @@ fn unknown_examples_and_serialized_profile_cap() {
     let rules:Vec<_>=(0..20).map(|i|json!({"before":format!("{}{}乙", "甲".repeat(1200),i),"after":format!("{}{} 乙", "甲".repeat(1200),i),"kind":"layout"})).collect();
     assert!(review(&json!({"text":"甲乙","profile":{"version":1,"rules":rules}})).is_err());
 }
+
+#[test]
+fn layout_and_punctuation_learning_are_order_independent() {
+    let examples = vec![
+        json!({"before":"甲、乙。","after":"甲、\n乙。"}),
+        json!({"before":"甲、乙。","after":"甲。乙。"}),
+    ];
+    let mut reversed = examples.clone();
+    reversed.reverse();
+    let first = learn(&json!({"examples":examples})).unwrap();
+    let second = learn(&json!({"examples":reversed})).unwrap();
+    let first = review(&json!({"text":"甲、乙。","profile":first["profile"]})).unwrap();
+    let second = review(&json!({"text":"甲、乙。","profile":second["profile"]})).unwrap();
+    assert_eq!(first, second);
+    assert_eq!(first["findings"].as_array().unwrap().len(), 2);
+    assert_eq!(first["findings"][1]["choices"], json!(["甲。乙。"]));
+}
