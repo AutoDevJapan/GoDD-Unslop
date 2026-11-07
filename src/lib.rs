@@ -1,5 +1,6 @@
 //! Practical Japanese writing feedback. Rules are review prompts, not authorship tests.
 pub mod rpc;
+pub mod style;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use serde::{Deserialize, Serialize};
@@ -151,6 +152,9 @@ fn prose_ranges(text: &str) -> (Vec<Range<usize>>, usize, usize, usize) {
     (ranges, headings, lists, strong)
 }
 fn visible(text: &str) -> String {
+    visible_with_breaks(text, true)
+}
+fn visible_with_breaks(text: &str, count_line_breaks: bool) -> String {
     let mut output = String::new();
     let mut excluded = 0usize;
     for event in parser(text) {
@@ -160,6 +164,7 @@ fn visible(text: &str) -> String {
                 excluded = excluded.saturating_sub(1)
             }
             Event::Text(t) if excluded == 0 => output.push_str(&t),
+            Event::SoftBreak | Event::HardBreak if !count_line_breaks => output.push(' '),
             Event::SoftBreak
             | Event::HardBreak
             | Event::End(TagEnd::Paragraph | TagEnd::Heading(_) | TagEnd::Item) => {
@@ -314,7 +319,8 @@ pub fn analyze(text: &str) -> Result<Analysis, Error> {
     }
     findings.sort_by_key(|f| (f.start.byte, f.end.byte));
     let chars = plain.chars().filter(|c| !c.is_whitespace()).count();
-    let sentence_lengths: Vec<usize> = plain
+    let sentence_text = visible_with_breaks(text, false);
+    let sentence_lengths: Vec<usize> = sentence_text
         .split(['。', '！', '？', '\n'])
         .map(|s| s.chars().filter(|c| !c.is_whitespace()).count())
         .filter(|n| *n > 0)
@@ -366,6 +372,7 @@ pub fn plan(text: &str, context: &str) -> Result<Value, Error> {
             "指摘が読みにくさを生むか前後を読んで確かめ、問題がある箇所だけを直す。自然な表現は残す。",
             "何が起きるかを最初に伝えられるか検討する。主語と動作を分かる範囲で書き、内部の番号だけで説明しない。",
             "分からない主体や理由を作らない。架空の実績や経験を足さず、未確定の点は未確定のまま示す。",
+            "敬語・ため口は評価せず、意味のつながる語句・節・文のまとまりを保つ。改行位置と空行による距離を別々に検討し、句点ごとの機械的な分割を避ける。",
             "コード、URL、引用、名前、正確な値を保つ。改稿後に原文と見比べ、変わった意味を確認する。"
         ]}),
     )
@@ -438,6 +445,8 @@ pub fn dispatch(input: &Value) -> Result<Value, Error> {
         "compare" => &["action", "original", "rewrite"],
         "plan" => &["action", "text", "context"],
         "features" => &["action", "text"],
+        "style_learn" => &["action", "examples", "profile"],
+        "style_review" => &["action", "text", "profile"],
         _ => return Err(Error("未対応のactionです。")),
     };
     if obj.keys().any(|key| !fields.contains(&key.as_str())) {
@@ -452,6 +461,8 @@ pub fn dispatch(input: &Value) -> Result<Value, Error> {
         "analyze" => serde_json::to_value(analyze(required("text")?)?)
             .map_err(|_| Error("結果を変換できません。")),
         "compare" => compare(required("original")?, required("rewrite")?),
+        "style_learn" => style::learn(input),
+        "style_review" => style::review(input),
         "plan" => {
             let context = if obj.contains_key("context") {
                 required("context")?

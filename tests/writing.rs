@@ -282,3 +282,21 @@ fn utf8_bom_is_metadata_but_locations_refer_to_the_original_source() {
     );
     assert_eq!(plan(text, "").unwrap()["original"], text);
 }
+
+#[test]
+fn a_visual_line_break_does_not_shorten_a_sentence() {
+    let joined = analyze("資料を保存し、結果を確認しました。").unwrap();
+    for text in [
+        "資料を保存し、\n結果を確認しました。",
+        "資料を保存し、  \r\n結果を確認しました。",
+    ] {
+        assert_eq!(
+            analyze(text).unwrap().metrics.sentence_lengths,
+            joined.metrics.sentence_lengths
+        );
+    }
+    assert_eq!(
+        analyze("猫\n\n犬").unwrap().metrics.sentence_lengths,
+        vec![1, 1]
+    );
+}
