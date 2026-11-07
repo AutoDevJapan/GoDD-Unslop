@@ -33,6 +33,7 @@ fn source_literals_are_not_reviewed_as_prose() {
 fn ordinary_contrast_and_concrete_work_remain_untouched() {
     for text in [
         "料金は500円です。担当者が明日までに確認します。",
+        "結果をご報告いたします。",
         "速度より正確さを優先します。",
         "資料を作るのではなく、届いた資料を読みます。",
         "猫は庭を走っています。",
@@ -55,7 +56,7 @@ fn experience_rules_give_review_candidates() {
             "通知送信処理実行完了確認結果保存処理を実施します。",
             "reader.noun_relationship",
         ),
-        ("結果をご報告いたします。", "reader.action_visibility"),
+        ("改善を推進してまいります。", "reader.action_visibility"),
         (
             "状態: 完了。\n確認テストはまだ実行していません。",
             "reader.status_alignment",
@@ -193,7 +194,7 @@ fn numeric_order_units_kanji_signs_and_bounds_are_candidates() {
         not_covered["comparison_scope"]
             .as_str()
             .unwrap()
-            .contains("網羅しません")
+            .contains("網羅するものではなく")
     );
 }
 

@@ -10,19 +10,19 @@ pub fn tools() -> Value {
         ),
         (
             "unslop_compare",
-            "原文と改稿の数量や意味を確認する差分",
+            "原文と改稿を比較し、数量や意味を確認するための差分を返す",
             json!({"original":{"type":"string"},"rewrite":{"type":"string"}}),
             vec!["original", "rewrite"],
         ),
         (
             "unslop_plan",
-            "用途と元の内容を保つ推敲手順",
+            "文章の用途と元の内容を保つための推敲手順を返す",
             json!({"text":{"type":"string"},"context":{"type":"string"}}),
             vec!["text"],
         ),
         (
             "unslop_features",
-            "対応ルールの一覧と入力文の特徴量",
+            "対応するルールの一覧と、入力した文章の特徴を返す",
             json!({"text":{"type":"string"}}),
             vec![],
         ),
@@ -55,7 +55,7 @@ mod transport {
         fn get_info(&self) -> ServerConfig {
             ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
                 .with_instructions(
-                    "明示入力の文章だけを分析します。作者の判定や自動書き直しは行いません。",
+                    "指定された文章や修正例を分析し、確認する箇所や推敲の手順を返します。\n作者の判定や自動の書き換えは行いません。",
                 )
         }
         async fn list_tools(

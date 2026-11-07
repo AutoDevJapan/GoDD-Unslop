@@ -3,7 +3,7 @@
   "rules": [
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_supplied_in_session",
+      "source_kind": "owner_instruction",
       "source_date": "2026-09-30",
       "id": "owner.result_first",
       "correction": "結果と必要な操作を最初の文へ置く",
@@ -11,7 +11,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_supplied_in_session",
+      "source_kind": "owner_instruction",
       "source_date": "2026-09-30",
       "id": "owner.explain_terms",
       "correction": "読み手に見える動作や結果を具体的な語で説明する",
@@ -19,7 +19,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_supplied_in_session",
+      "source_kind": "owner_instruction",
       "source_date": "2026-09-30",
       "id": "owner.noun_chains",
       "correction": "確定している主体と動作の関係を動詞で書く",
@@ -27,7 +27,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_supplied_in_session",
+      "source_kind": "owner_instruction",
       "source_date": "2026-09-30",
       "id": "owner.ambiguous_terms",
       "correction": "使う語が指す内容を文脈で明らかにする",
@@ -35,7 +35,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_supplied_in_session",
+      "source_kind": "owner_instruction",
       "source_date": "2026-10-04",
       "id": "owner.match_status",
       "correction": "確認した完了条件に合わせて状態を示す",
@@ -43,7 +43,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_and_verified_discord",
+      "source_kind": "owner_instruction",
       "source_date": "2026-10-04",
       "id": "owner.separate_topics",
       "correction": "報告を製品ごとに分け、共通欄は短いまとめとリンクにする",
@@ -51,7 +51,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_and_verified_discord",
+      "source_kind": "owner_instruction",
       "source_date": "2026-10-02",
       "id": "owner.clear_request",
       "correction": "案件と起きたこと、判断すると変わる内容を最初に示す",
@@ -59,7 +59,7 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_supplied_in_session",
+      "source_kind": "owner_instruction",
       "source_date": "2026-10-04",
       "id": "owner.direct_text",
       "correction": "短い文章はメッセージ本文に書き、長いときは分ける",
@@ -67,12 +67,20 @@
     },
     {
       "confidence": "explicit",
-      "source_kind": "owner_instruction_and_verified_discord",
+      "source_kind": "owner_instruction",
       "source_date": "2026-10-05",
       "id": "owner.design_before_ui",
       "scope": "将来のUI工程。文章のAI判定に転用しない",
       "correction": "画面やキャラクターを先に画像で提案し、方向を決めてから実装する",
       "problem": "汎用的な見た目では製品を使う気にならない"
+    },
+    {
+      "confidence": "explicit",
+      "source_kind": "owner_instruction",
+      "source_date": "2026-11-07",
+      "id": "owner.semantic_spacing",
+      "correction": "意味のつながる語句・節・文をまとめ、文の境界で必要に応じて改行し、空行で話題や意味の距離を表す。短さや文字数で機械的に分断せず、敬語の有無とは分けて評価する",
+      "problem": "内容のつながりを無視した分断や、話題の距離が伝わらない配置で読みにくくなる"
     }
   ],
   "schema_version": 1

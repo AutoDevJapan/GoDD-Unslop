@@ -19,16 +19,17 @@ pub struct Correction {
 }
 fn profile(v: Option<&Value>) -> Result<StyleProfile, Error> {
     let p: StyleProfile = match v {
-        Some(v) => {
-            serde_json::from_value(v.clone()).map_err(|_| Error("スタイル設定が不正です。"))?
-        }
+        Some(v) => serde_json::from_value(v.clone())
+            .map_err(|_| Error("文体設定の形式を確認してください。"))?,
         None => StyleProfile {
             version: 1,
             rules: vec![],
         },
     };
     if p.version != 1 || p.rules.len() > MAX_RULES {
-        return Err(Error("未対応の版または設定件数超過です。"));
+        return Err(Error(
+            "文体設定はversionを1とし、修正例を64件以内にしてください。",
+        ));
     }
     for r in &p.rules {
         validate(&r.before, &r.after)?;
@@ -46,7 +47,7 @@ fn profile(v: Option<&Value>) -> Result<StyleProfile, Error> {
             return Err(Error("学習条件に合わない修正です。"));
         }
         if r.kind != kind(&r.before, &r.after) {
-            return Err(Error("修正種別が不正です。"));
+            return Err(Error("修正前後の文章とkindの値が一致していません。"));
         }
     }
     if serde_json::to_vec(&p)
@@ -76,7 +77,7 @@ fn validate(a: &str, b: &str) -> Result<(), Error> {
         || a == b
     {
         return Err(Error(
-            "修正前後は異なる空でない文章を4096バイト以内で指定してください。",
+            "修正前と修正後には、それぞれ空でない異なる文章をUTF-8で4096バイト以内で指定してください。",
         ));
     }
     Ok(())
@@ -144,7 +145,7 @@ pub fn learn(input: &Value) -> Result<Value, Error> {
     }
     profile(Some(&json!(p)))?;
     Ok(
-        json!({"profile":p,"ignored_examples":ignored,"interpretation":"明示修正から学習します。意味や敬語は推定せず、保存は明示的に行います。"}),
+        json!({"profile":p,"ignored_examples":ignored,"interpretation":"指定された修正例から、改行位置や空行の間隔、句読点の変更を学びます。\n意味や敬語は推定しないため、引き継ぐ場合は返されたprofileを保存してください。"}),
     )
 }
 /// Inspect exact learned forms without modifying source or protected Markdown.
@@ -190,7 +191,7 @@ pub fn review(input: &Value) -> Result<Value, Error> {
         }
     }
     Ok(
-        json!({"findings":findings,"findings_limited":limited,"interpretation":"改行と空行距離を区別します。句読点変更は明示例との一致であり意味解析ではありません。原文は変更しません。"}),
+        json!({"findings":findings,"findings_limited":limited,"interpretation":"改行位置と空行による距離を分けて照合し、句読点の変更は修正前の文章と一致する場合に候補を示します。\n意味を解析するものではなく、原文も変更しません。"}),
     )
 }
 fn layout_findings(text: &str, p: &StyleProfile) -> (Vec<Value>, bool) {

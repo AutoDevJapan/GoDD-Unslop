@@ -16,7 +16,7 @@ fn read(path: Option<&str>, limit: usize) -> Result<String, String> {
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
     if bytes.len() > limit {
-        return Err("入力の上限を超えました。".into());
+        return Err("入力がサイズの上限を超えています。".into());
     }
     String::from_utf8(bytes).map_err(|_| "UTF-8の文章を指定してください。".into())
 }
@@ -24,7 +24,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if matches!(command, "help" | "--help" | "-h") {
         println!(
-            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop serve\n省略時は標準入力。featuresで入力なしの一覧だけを得る場合は --catalog。終了コード0=成功、1=strictで候補あり、2=入力エラー。"
+            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コードは、成功時が0、--strictで候補がある場合が1、入力エラー時が2です。"
         );
         return Ok(0);
     }
@@ -66,7 +66,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
                 .map_err(|_| "JSON入力を確認してください。".to_string())?;
             value
                 .as_object_mut()
-                .ok_or("入力はJSON objectです。")?
+                .ok_or("入力にはJSONオブジェクトを指定してください。")?
                 .insert("action".into(), json!(command.replace('-', "_")));
             value
         }
