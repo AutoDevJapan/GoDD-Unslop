@@ -273,6 +273,6 @@ godd-unslop compare article.txt revised.txt --strict
 ## ライセンスと関連資料
 
 現在の公開版はGPLv3以降で提供しています。  
-自己保有コードの個別許諾と過去のMIT許諾は、[README](../README.md#ライセンスと貢献)、[LICENSE](../LICENSE)、[NOTICE](../NOTICE)を確認してください。
+自己保有コードの個別許諾と過去のMIT許諾は、[README](../README.md#ライセンス)、[LICENSE](../LICENSE)、[NOTICE](../NOTICE)を確認してください。
 
 データの扱いは[収集方針](data-policy.md)、過去の測定と現在の機能の違いは[評価の説明](evaluation.md)にまとめています。
