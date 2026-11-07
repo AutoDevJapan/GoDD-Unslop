@@ -4,7 +4,7 @@ use std::{
     process::ExitCode,
 };
 
-fn read(path: Option<&str>) -> Result<String, String> {
+fn read(path: Option<&str>, limit: usize) -> Result<String, String> {
     let mut input: Box<dyn Read> = match path {
         None | Some("-") => Box::new(io::stdin()),
         Some(name) => Box::new(std::fs::File::open(name).map_err(|e| e.to_string())?),
@@ -12,10 +12,10 @@ fn read(path: Option<&str>) -> Result<String, String> {
     let mut bytes = Vec::new();
     input
         .by_ref()
-        .take((godd_unslop::MAX_TEXT_BYTES + 1) as u64)
+        .take((limit + 1) as u64)
         .read_to_end(&mut bytes)
         .map_err(|e| e.to_string())?;
-    if bytes.len() > godd_unslop::MAX_TEXT_BYTES {
+    if bytes.len() > limit {
         return Err("入力の上限を超えました。".into());
     }
     String::from_utf8(bytes).map_err(|_| "UTF-8の文章を指定してください。".into())
@@ -24,7 +24,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if matches!(command, "help" | "--help" | "-h") {
         println!(
-            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop serve\n省略時は標準入力。featuresで入力なしの一覧だけを得る場合は --catalog。終了コード0=成功、1=strictで候補あり、2=入力エラー。"
+            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop serve\n省略時は標準入力。featuresで入力なしの一覧だけを得る場合は --catalog。終了コード0=成功、1=strictで候補あり、2=入力エラー。"
         );
         return Ok(0);
     }
@@ -46,17 +46,31 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     if catalog && (command != "features" || !paths.is_empty()) {
         return Err("--catalogはfeatures専用です。".into());
     }
+    let json_limit = 2 * 1024 * 1024;
     let action = match command {
-        "analyze" | "plan" => json!({"action":command,"text":read(paths.first().copied())?}),
+        "analyze" | "plan" => {
+            json!({"action":command,"text":read(paths.first().copied(), godd_unslop::MAX_TEXT_BYTES)?})
+        }
         "features" if catalog => json!({"action":"features"}),
-        "features" => json!({"action":"features","text":read(paths.first().copied())?}),
+        "features" => {
+            json!({"action":"features","text":read(paths.first().copied(), godd_unslop::MAX_TEXT_BYTES)?})
+        }
         "compare" => {
             if paths.len() != 2 || paths.iter().filter(|p| **p == "-").count() > 1 {
                 return Err("比較する2ファイルを指定してください。".into());
             }
-            json!({"action":"compare","original":read(Some(paths[0]))?,"rewrite":read(Some(paths[1]))?})
+            json!({"action":"compare","original":read(Some(paths[0]), godd_unslop::MAX_TEXT_BYTES)?,"rewrite":read(Some(paths[1]), godd_unslop::MAX_TEXT_BYTES)?})
         }
-        "dispatch" => serde_json::from_str::<Value>(&read(paths.first().copied())?)
+        "style-learn" | "style-review" => {
+            let mut value: Value = serde_json::from_str(&read(paths.first().copied(), json_limit)?)
+                .map_err(|_| "JSON入力を確認してください。".to_string())?;
+            value
+                .as_object_mut()
+                .ok_or("入力はJSON objectです。")?
+                .insert("action".into(), json!(command.replace('-', "_")));
+            value
+        }
+        "dispatch" => serde_json::from_str::<Value>(&read(paths.first().copied(), json_limit)?)
             .map_err(|_| "JSON入力を確認してください。".to_string())?,
         _ => return Err("未対応のコマンドです。".into()),
     };

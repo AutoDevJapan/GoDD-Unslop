@@ -26,6 +26,18 @@ pub fn tools() -> Value {
             json!({"text":{"type":"string"}}),
             vec![],
         ),
+        (
+            "unslop_style_learn",
+            "明示した修正例から改行と空行の選択を学び、保存可能な文体設定を返す",
+            json!({"examples":{"type":"array","items":{"type":"object","properties":{"before":{"type":"string"},"after":{"type":"string"}},"required":["before","after"],"additionalProperties":false}},"profile":{"type":"object"}}),
+            vec!["examples"],
+        ),
+        (
+            "unslop_style_review",
+            "学習済み文体設定と文章の改行位置・間隔を照合する",
+            json!({"text":{"type":"string"},"profile":{"type":"object"}}),
+            vec!["text", "profile"],
+        ),
     ];
     json!({"tools":descriptors.into_iter().map(|(name,description,properties,required)|json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}})).collect::<Vec<_>>()})
 }
@@ -65,6 +77,8 @@ mod transport {
                 "unslop_compare" => "compare",
                 "unslop_plan" => "plan",
                 "unslop_features" => "features",
+                "unslop_style_learn" => "style_learn",
+                "unslop_style_review" => "style_review",
                 _ => return Err(ErrorData::invalid_params("Unknown tool", None)),
             };
             let mut arguments = request.arguments.unwrap_or_default();

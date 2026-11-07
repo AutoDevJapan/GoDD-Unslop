@@ -82,7 +82,7 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
             .as_array()
             .unwrap()
             .len(),
-        4
+        6
     );
     for (name, arguments) in [
         ("unslop_analyze", json!({"text":"既定です。"})),
@@ -95,6 +95,14 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
             json!({"text":"修正しました。","context":"作業の報告"}),
         ),
         ("unslop_features", json!({"text":"保存しました。"})),
+        (
+            "unslop_style_learn",
+            json!({"examples":[{"before":"保存。確認。","after":"保存。\n確認。"}]}),
+        ),
+        (
+            "unslop_style_review",
+            json!({"text":"保存。確認。","profile":{"version":1,"rules":[]}}),
+        ),
     ] {
         send(
             &mut input,
@@ -121,4 +129,46 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
     assert!(receive(&mut output)["error"].is_object());
     drop(input);
     assert!(child.wait().unwrap().success());
+}
+
+#[test]
+fn cli_retains_corrections_between_explicit_calls() {
+    let input = json!({"examples":[{"before":"結果を保存しました。次に確認します。","after":"結果を保存しました。\n\n次に確認します。"}]});
+    let learned = cli(&["style-learn"], input.to_string().as_bytes());
+    assert_eq!(learned.status.code(), Some(0));
+    let output: Value = serde_json::from_slice(&learned.stdout).unwrap();
+    let request =
+        json!({"profile":output["profile"],"text":"結果を保存しました。次に確認します。"});
+    let checked = cli(
+        &["style-review", "--strict"],
+        request.to_string().as_bytes(),
+    );
+    assert_eq!(checked.status.code(), Some(1));
+    let report: Value = serde_json::from_slice(&checked.stdout).unwrap();
+    assert!(!report["findings"].as_array().unwrap().is_empty());
+    assert_eq!(cli(&["style-learn"], b"[]").status.code(), Some(2));
+}
+
+#[test]
+fn json_envelope_keeps_profile_separate_from_text_limit() {
+    let learned = cli(
+        &["style-learn"],
+        json!({"examples":[{"before":"甲。乙。","after":"甲。\n乙。"}]})
+            .to_string()
+            .as_bytes(),
+    );
+    assert_eq!(learned.status.code(), Some(0));
+    let profile = serde_json::from_slice::<Value>(&learned.stdout).unwrap()["profile"].clone();
+    let text = "あ".repeat(43000);
+    let request = json!({"text":text,"profile":profile})
+        .to_string()
+        .replace('あ', "\\u3042");
+    assert!(request.len() > godd_unslop::MAX_TEXT_BYTES);
+    let reviewed = cli(&["style-review"], request.as_bytes());
+    assert_eq!(
+        reviewed.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&reviewed.stderr)
+    );
 }
