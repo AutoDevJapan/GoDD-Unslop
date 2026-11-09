@@ -1,4 +1,5 @@
 //! Practical Japanese writing feedback. Rules are review prompts, not authorship tests.
+pub mod relationships;
 pub mod rewrite;
 pub mod rpc;
 pub mod skill;
@@ -444,7 +445,7 @@ pub fn dispatch(input: &Value) -> Result<Value, Error> {
         .and_then(Value::as_str)
         .ok_or(Error("actionを指定してください。"))?;
     let fields: &[&str] = match action {
-        "rewrite" => &["action", "text", "profile", "preserve"],
+        "rewrite" => &["action", "text", "profile", "preserve", "context"],
         "analyze" => &["action", "text"],
         "compare" => &["action", "original", "rewrite"],
         "plan" => &["action", "text", "context"],
