@@ -5,7 +5,7 @@ pub fn tools() -> Value {
         (
             "unslop_rewrite",
             "明示入力をChatGPTサブスク経由のCodex CLIで自然な日本語へ書き換え、原文と比較を返す",
-            json!({"text":{"type":"string"},"profile":{"type":"object"},"preserve":{"type":"array","items":{"type":"string"}}}),
+            json!({"text":{"type":"string"},"profile":{"type":"object"},"preserve":{"type":"array","items":{"type":"string"}},"context":crate::rewrite::context_schema()}),
             vec!["text"],
         ),
         (

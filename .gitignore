@@ -1,2 +1,4 @@
 /target/
 /codex-owned-*/
+*.sqlite3
+*.sqlite3-*

@@ -262,6 +262,35 @@ $learned = ConvertFrom-Json $learnedJson
 
 個人の修正例や`profile`には元の語句が含まれるため、公開リポジトリへコミットせず、公開してよい文章だけを共有してください。
 
+## 相手・場面・背景を指定する
+
+同じ用件を相手に合わせて伝えるには、`rewrite`の入力へ`context`を追加します。
+たとえば、親しい同僚へのチャットなら次のように指定できます。
+
+```json
+{
+  "text": "資料を火曜日17時までに送ってください。",
+  "context": {
+    "purpose": "資料の送付を依頼する",
+    "recipient": {"relation": "peer", "closeness": "close"},
+    "tone": {"formality": 2, "warmth": 3, "directness": 2, "emoji": "light"},
+    "channel": "chat"
+  }
+}
+```
+
+`formality`、`warmth`、`directness`は0〜4で調整します。職位だけで一律の口調にはせず、相手との関係や用途を合わせて使います。
+公式文書は`channel`を`official`にすると絵文字を使わない扱いになります。
+
+`context`には`purpose`（目的）、`audience`（読み手）、`document_type`（文書の種類）、`situation`（背景）、`stance`（立場）、`company_style`（会社の文体）、`reference_examples`（参考例）も渡せます。
+会社独自の文体が必須なら`company_style_required`を`true`にし、文体の説明か参考例を渡してください。
+
+重要な不明点は`missing_facts`へ質問の配列で指定できます。必要な情報が不足している場合は、`status: needs_context`と`questions`を返し、AIによる改稿は実行しません。
+Skillを使うAIは、まず提供資料や許可された参照先を調べ、それでも分からない点を質問します。CLI自体が他のファイルや連絡先を探すことはありません。
+
+相手の設定を毎回書かずに使う方法は、[関係性DBのガイド](recipient-context.md)を参照してください。
+保存した相手を指定する`rewrite-for`は改稿本文を返すだけで、メールやチャットの送信は行いません。
+
 ## 文章の特徴を調べる
 
 ```sh

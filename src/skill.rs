@@ -2,14 +2,29 @@
 use crate::Error;
 use std::{fs, path::Path};
 pub const CONTENT: &str = include_str!("../docs/distribution/godd-unslop-SKILL.md");
-const LAYOUT_START: &str = "<!-- godd-unslop:layout:start -->";
-const LAYOUT_END: &str = "<!-- godd-unslop:layout:end -->";
+fn section(name: &str) -> String {
+    let content = CONTENT.replace("\r\n", "\n");
+    let start_marker = format!("<!-- godd-unslop:{name}:start -->");
+    let end_marker = format!("<!-- godd-unslop:{name}:end -->");
+    let start = content.find(&start_marker).expect("guidance start") + start_marker.len();
+    let end = content.find(&end_marker).expect("guidance end");
+    content[start..end].trim().to_string()
+}
 /// Line-break and blank-line guidance shared by the Skill and the rewrite prompt.
 pub fn layout_guidance() -> String {
-    let content = CONTENT.replace("\r\n", "\n");
-    let start = content.find(LAYOUT_START).expect("layout guidance start") + LAYOUT_START.len();
-    let end = content.find(LAYOUT_END).expect("layout guidance end");
-    content[start..end].trim().to_string()
+    section("layout")
+}
+/// Topic, viewpoint, tense, certainty and feeling guidance shared by the Skill and the rewrite prompt.
+pub fn nuance_guidance() -> String {
+    section("nuance")
+}
+/// Register guidance shared by the Skill and the rewrite prompt.
+pub fn register_guidance() -> String {
+    section("register")
+}
+/// Recipient, closeness, tone and emoji guidance shared by the Skill and the rewrite prompt.
+pub fn recipient_guidance() -> String {
+    section("recipient")
 }
 pub fn install(root: &Path) -> Result<std::path::PathBuf, Error> {
     let directory = root.join("godd-unslop");
