@@ -150,14 +150,19 @@ static ACTIVE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::
 struct Slot;
 impl Slot {
     fn acquire() -> Result<Self, Error> {
-        ACTIVE
-            .fetch_update(
-                std::sync::atomic::Ordering::SeqCst,
-                std::sync::atomic::Ordering::SeqCst,
-                |n| (n < 2).then_some(n + 1),
-            )
-            .map(|_| Self)
-            .map_err(|_| Error("AI処理は同時に2件までです。完了後に再実行してください。"))
+        use std::sync::atomic::Ordering::SeqCst;
+        let mut current = ACTIVE.load(SeqCst);
+        loop {
+            if current >= 2 {
+                return Err(Error(
+                    "AI処理は同時に2件までです。完了後に再実行してください。",
+                ));
+            }
+            match ACTIVE.compare_exchange_weak(current, current + 1, SeqCst, SeqCst) {
+                Ok(_) => return Ok(Self),
+                Err(observed) => current = observed,
+            }
+        }
     }
 }
 impl Drop for Slot {
