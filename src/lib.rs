@@ -1,5 +1,7 @@
 //! Practical Japanese writing feedback. Rules are review prompts, not authorship tests.
+pub mod rewrite;
 pub mod rpc;
+pub mod skill;
 pub mod style;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
@@ -442,6 +444,7 @@ pub fn dispatch(input: &Value) -> Result<Value, Error> {
         .and_then(Value::as_str)
         .ok_or(Error("actionを指定してください。"))?;
     let fields: &[&str] = match action {
+        "rewrite" => &["action", "text", "profile", "preserve"],
         "analyze" => &["action", "text"],
         "compare" => &["action", "original", "rewrite"],
         "plan" => &["action", "text", "context"],
@@ -461,6 +464,7 @@ pub fn dispatch(input: &Value) -> Result<Value, Error> {
     match action {
         "analyze" => serde_json::to_value(analyze(required("text")?)?)
             .map_err(|_| Error("結果を変換できません。")),
+        "rewrite" => rewrite::run(input),
         "compare" => compare(required("original")?, required("rewrite")?),
         "style_learn" => style::learn(input),
         "style_review" => style::review(input),

@@ -82,7 +82,7 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
             .as_array()
             .unwrap()
             .len(),
-        6
+        7
     );
     for (name, arguments) in [
         ("unslop_analyze", json!({"text":"既定です。"})),

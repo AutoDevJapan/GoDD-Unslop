@@ -24,8 +24,17 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if matches!(command, "help" | "--help" | "-h") {
         println!(
-            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コードは、成功時が0、--strictで候補がある場合が1、入力エラー時が2です。"
+            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop rewrite [JSON_FILE|-]\ngodd-unslop install-skill SKILLS_ROOT\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コードは、成功時が0、--strictで候補がある場合が1、入力エラー時が2です。"
         );
+        return Ok(0);
+    }
+    if command == "install-skill" {
+        if args.len() != 2 {
+            return Err("install-skillにはSkillのルートフォルダーを1つ指定してください。".into());
+        }
+        let path = godd_unslop::skill::install(std::path::Path::new(&args[1]))
+            .map_err(|e| e.to_string())?;
+        println!("{}", json!({"installed":path}));
         return Ok(0);
     }
     let mut strict = false;
@@ -61,7 +70,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
             }
             json!({"action":"compare","original":read(Some(paths[0]), godd_unslop::MAX_TEXT_BYTES)?,"rewrite":read(Some(paths[1]), godd_unslop::MAX_TEXT_BYTES)?})
         }
-        "style-learn" | "style-review" => {
+        "rewrite" | "style-learn" | "style-review" => {
             let mut value: Value = serde_json::from_str(&read(paths.first().copied(), json_limit)?)
                 .map_err(|_| "JSON入力を確認してください。".to_string())?;
             value
