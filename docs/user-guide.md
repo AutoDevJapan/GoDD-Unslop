@@ -1,12 +1,12 @@
 # GoDD Unslop ユーザーガイド
 
-図で使い方を確認する場合は、[PowerPoint版](user-guide.pptx)をダウンロードして開いてください（20枚）。  
+[PowerPoint版](user-guide.pptx)は従来の分析・比較・修正例の保存を説明する20枚です。AI改稿とSkill導入、追加されたMCPツールは未反映のため、この文章版を参照してください。
 操作例で使うファイルは[サンプルフォルダー](guide-examples/)から入手できます。
 
-GoDD Unslopは、文章を見直す候補と推敲の手順を返すツールです。  
-自動で書き換えるのではなく、指摘を原文や文脈と照合して採用する修正を選びます。
+GoDD Unslopは、文章を見直す候補と推敲の手順を返すツールです。
+Skillで下書きから書き方を整える方法と、Codex CLIで既存の文章を改稿する方法があります。分析機能だけを使い、自分で修正を選ぶこともできます。
 
-CLI・Rustライブラリ・MCPサーバーとして利用でき、APIキーや生成モデルの呼び出しは必要ありません。  
+CLI・Rustライブラリ・MCPサーバーとして利用できます。分析・比較はモデルを呼ばず、AI改稿はChatGPTサブスクにログインしたCodex CLIを使います。APIキーは使いません。
 敬語かため口か、作者が人間かAIかを採点するものではありません。
 
 ## インストールと更新
@@ -20,10 +20,80 @@ cargo install --path . --locked
 godd-unslop --help
 ```
 
-コマンドが見つからない場合は、Cargoのインストール先の`bin`フォルダーをPATHへ追加します。  
+コマンドが見つからない場合は、Cargoのインストール先の`bin`フォルダーをPATHへ追加します。
 標準の場所はWindowsなら`%USERPROFILE%\.cargo\bin`、macOS・Linuxなら`$HOME/.cargo/bin`で、`CARGO_HOME`を変更している場合はその配下です。
 
 更新するときは、このリポジトリで`git pull --ff-only`を実行し、もう一度`cargo install --path . --locked`を実行します。
+
+この版の`rewrite`と`install-skill`を使うには、上記のインストールで実行ファイルを更新してください。古いバイナリには追加コマンドがありません。
+
+## AIに文章を書いてもらうためのSkillを入れる
+
+最初の下書きから書き方を整えたい場合は、使っているAIアプリへSkillを導入します。
+アプリが読み込むSkillのルートフォルダーを確認し、次のように指定してください。アプリの設定ファイルや既存Skillは変更しません。
+
+Codexでホーム配下のSkillsを使う場合の例です。別のアプリや配置へ合わせる場合は保存先を置き換えます。
+
+```powershell
+# Windows / PowerShell
+godd-unslop install-skill (Join-Path $HOME '.codex/skills')
+```
+
+```sh
+# macOS・Linuxでホーム配下を使う場合
+godd-unslop install-skill "$HOME/.codex/skills"
+```
+
+共有のSkill置き場を使っている環境では、ホーム配下へ新設せず、既存の共有先を指定してください。
+保存先の下に`godd-unslop/SKILL.md`が作られます。同じ内容があれば成功し、異なる既存ファイルがあれば上書きせずエラーを返します。
+更新時に内容が異なる場合は、自分の変更を別途保存してから内容を比較してください。再インストールだけで既存Skillが更新されるわけではありません。
+アプリのSkill一覧で読み込まれたことを確認し、必要ならそのアプリの手順で再読み込みするか新しい会話を開きます。
+
+「godd-unslopのSkillを使って、利用者への変更案内を書いて」と依頼し、読者・事実・伝える結果を添えます。
+このSkillは、利用中のAI自身に文のつながりや段落の方針を渡します。別のモデル呼び出しや`rewrite`の再帰実行は必要ありません。
+CLIを使えない環境でも[Skill本文](distribution/godd-unslop-SKILL.md)を読ませて利用できます。導入によってモデルの重みが変わったり、自然な日本語が常に保証されたりするものではありません。
+
+## Codex CLIで文章を書き直す
+
+既存の文章の改稿をJSONで受け取りたい場合に使います。Codex CLIを導入し、ChatGPTサブスクのアカウントでログインしておきます。
+APIキーのログインでは実行しません。利用枠が足りない場合は、その契約の利用状況を確認してください。
+
+起動側で`GODD_UNSLOP_CODEX`を設定すると、呼び出す実行ファイルを指定できます。指定できるのは、運用者が信頼して選んだCodex実行ファイルです。入力JSONから実行先を選ぶことはできません。
+未指定ならWindowsでは`codex.exe`、macOS・Linuxでは`codex`をPATHから探します。
+Windowsのnpm経由の`codex.cmd`・`codex.ps1`は直接起動できないため、実際のネイティブ実行ファイルの絶対パスを指定してください。
+
+```powershell
+# パスは実際に導入した実行ファイルへ置き換えます。
+$env:GODD_UNSLOP_CODEX = 'C:/path/to/codex.exe'
+& $env:GODD_UNSLOP_CODEX login status
+```
+
+```sh
+# PATHにあるcodexを使う場合
+codex login status
+# 別の実行ファイルなら、その絶対パスを指定します。
+# export GODD_UNSLOP_CODEX=/path/to/codex
+```
+
+`login status`でChatGPTを使ったログインであることを確認します。未ログインなら、指定した実行ファイルで`login`を実行し、表示された認証手順を進めてください。
+
+UTF-8の`rewrite-request.json`に次の内容を保存します。必須項目は`text`です。
+
+```json
+{"text":"確認を実施しました。結果は問題なしです。公開作業への移行が可能な状態です。"}
+```
+
+```sh
+godd-unslop rewrite rewrite-request.json
+```
+
+`rewritten_text`が改稿本文です。`original`と`comparison`、`meaning_warnings`も返るため、条件・主体・否定・数量が変わっていないか確認してから採用します。
+改稿はJSONとして返り、元ファイルを上書きしません。必ず異なる文章になるとは限らず、意味の一致や日本語の品質を保証する結果でもありません。
+`rewrite`を選ぶと原文と補助設定をCodex経由でChatGPTへ送ります。分析だけの場合とは異なります。
+
+任意の`profile`には保存した文体設定を、`preserve`には原文中で保持したい文字列の配列を渡せます。保持語は最大64件、各256バイトで、原文中に存在する必要があります。
+`profile`は意味解析の結果ではなく修正例です。会話から自動収集したり、この呼び出しの結果を自動学習したりはしません。
+`rewrite`の本文上限はUTF-8で128KiB、CLIのJSON全体は2MiBです。Codexの認証確認は15秒、改稿は120秒の制限があり、認証・利用枠・実行ファイル・保持表記の検査で失敗した場合はエラーを返します。
 
 ## 最初の文章を確認する
 
@@ -33,7 +103,7 @@ godd-unslop --help
 godd-unslop analyze article.txt
 ```
 
-ファイルを省略するか`-`を指定すると標準入力から読み込みます。  
+ファイルを省略するか`-`を指定すると標準入力から読み込みます。
 macOS・Linuxなどのシェルでは、次のように短い文章を渡せます。
 
 ```sh
@@ -60,10 +130,10 @@ PowerShell 7以降では、次のように渡せます。
 | `metrics` | 文の長さや漢字率などの数値。 |
 | `findings_limited` | 上限のために返しきれない候補があるか。 |
 
-位置の`byte`と`character`は0から、`line`と`column`は1から数えます。  
+位置の`byte`と`character`は0から、`line`と`column`は1から数えます。
 先頭BOMは本文の検査から外しますが、返す位置にはBOMも含みます。
 
-たとえば「既定」が指摘されても、読み手に意味が伝わる文脈なら残して構いません。  
+たとえば「既定」が指摘されても、読み手に意味が伝わる文脈なら残して構いません。
 指摘がないことも、文章の正しさや意味の保持を保証するものではありません。
 
 ## 推敲して原文と比べる
@@ -90,23 +160,23 @@ godd-unslop dispatch plan-request.json
 godd-unslop compare article.txt revised.txt
 ```
 
-`changed_region`は変更箇所をすべて含む一つの範囲で、個々の変更を並べた差分ではありません。  
+`changed_region`は変更箇所をすべて含む一つの範囲で、個々の変更を並べた差分ではありません。
 `numeric_fragments_changed`は対応済みの数量表現、`listed_marker_counts_changed`は列挙した語の件数の変化を示します。
 
-数や語の件数が同じでも、主体・条件・否定・確かさが変わることがあります。  
+数や語の件数が同じでも、主体・条件・否定・確かさが変わることがあります。
 `semantic_equality`は`not_established`として返るため、最後に原文と改稿の全文を照合してください。
 
 ## 改行と空行を修正例から学ぶ
 
-意味のつながる言葉や文節、節や連を保ち、その境界とまとまり同士の距離を改行・空行で表します。  
+意味のつながる言葉や文節、節や連を保ち、その境界とまとまり同士の距離を改行・空行で表します。
 句点や文字数だけで分断せず、実際にどう直したいかを修正前後の例で示してください。
 
-`style-learn`は修正例から`profile`を作り、`style-review`はその設定で文章を照合します。  
+`style-learn`は修正例から`profile`を作り、`style-review`はその設定で文章を照合します。
 以下はPowerShell 7以降を使い、リポジトリとは別の空の作業フォルダーで実行する手順です。
 
 ### 修正例を渡して設定を保存する
 
-次の内容をUTF-8の`learn-request.json`に保存します。  
+次の内容をUTF-8の`learn-request.json`に保存します。
 JSON文字列の`\n`は改行、`\n\n`は改行を二つ続けた空行を表します。
 
 ```json
@@ -134,7 +204,7 @@ $learned = ConvertFrom-Json $learnedJson
 )
 ```
 
-保存するのは結果全体ではなく、その中の`profile`です。  
+保存するのは結果全体ではなく、その中の`profile`です。
 `ignored_examples`が0でない場合は、学習条件に合わず取り込まれなかった例があります。
 
 ### 保存した設定で文章を照合する
@@ -149,7 +219,7 @@ $request = @{
 godd-unslop style-review review-request.json
 ```
 
-この例では、二つの文の間に改行を置く候補が返ります。  
+この例では、二つの文の間に改行を置く候補が返ります。
 `choices`の`spacing`が`same_line`なら同じ行、`line_break`なら改行、`paragraph_distance`なら空行による距離を表し、`blank_lines`は空行の数です。
 
 相反する修正例は`layout_conflict`などの競合として複数の候補を返し、登録順だけでどちらかを正解にはしません。
@@ -177,15 +247,15 @@ $learned = ConvertFrom-Json $learnedJson
 )
 ```
 
-追加後の設定を保存しておくと、次回の起動時にも使えます。  
+追加後の設定を保存しておくと、次回の起動時にも使えます。
 失敗した結果で保存済みの設定を上書きしないよう、終了コードを確認してから保存してください。
 
 ### 学習できる範囲
 
-現在は、修正前後の文字・数字の並びを保ち、配置や句読点を変えた例を扱います。  
+現在は、修正前後の文字・数字の並びを保ち、配置や句読点を変えた例を扱います。
 単語の言い換えや敬語への変更、Markdownや引用を含む例は取り込まれない場合があります。
 
-改行の照合は前後それぞれ最大4文字の局所的な文字列を手がかりにし、同じ意味の言い換え全般へ一般化するものではありません。  
+改行の照合は前後それぞれ最大4文字の局所的な文字列を手がかりにし、同じ意味の言い換え全般へ一般化するものではありません。
 文節・構文・談話の意味解析、会話の自動収集、起動をまたぐ自動保存、本文の自動修正は行いません。
 
 個人の修正例や`profile`には元の語句が含まれるため、公開リポジトリへコミットせず、公開してよい文章だけを共有してください。
@@ -197,12 +267,12 @@ godd-unslop features article.txt
 godd-unslop features --catalog
 ```
 
-文長は句点・疑問符・感嘆符や段落などのブロック境界で区切り、空白と区切り文字を除いて数えます。  
+文長は句点・疑問符・感嘆符や段落などのブロック境界で区切り、空白と区切り文字を除いて数えます。
 段落内の改行で一文を短く数えることはなく、漢字率や平均文長も品質や作者を採点する点数ではありません。
 
 ## MCPクライアントから使う
 
-MCPクライアントに、`godd-unslop serve`を標準入出力で起動するサーバーとして登録します。  
+MCPクライアントに、`godd-unslop serve`を標準入出力で起動するサーバーとして登録します。
 `mcpServers`形式を使うクライアントなら、次の設定をそのクライアントの設定ファイルへ組み込めます。
 
 ```json
@@ -216,11 +286,12 @@ MCPクライアントに、`godd-unslop serve`を標準入出力で起動する�
 }
 ```
 
-設定ファイルの場所や形式はクライアントによって異なります。  
+設定ファイルの場所や形式はクライアントによって異なります。
 GUIから起動するクライアントでPATHが引き継がれない場合は、`command`へ実行ファイルの絶対パスを指定してください。
 
 | ツール | 主な入力 | 返す内容 |
 | --- | --- | --- |
+| `unslop_rewrite` | `text`、任意の`profile`・`preserve` | Codex経由の改稿と原文比較。 |
 | `unslop_analyze` | `text` | 指摘と文章の特徴。 |
 | `unslop_plan` | `text`、任意の`context` | 原文と用途を保つ推敲手順。 |
 | `unslop_compare` | `original`、`rewrite` | 差分と数量・語の件数の比較。 |
@@ -228,10 +299,12 @@ GUIから起動するクライアントでPATHが引き継がれない場合は�
 | `unslop_style_learn` | `examples`、任意の`profile` | 更新した設定と無視した例の件数。 |
 | `unslop_style_review` | `text`、`profile` | 配置・句読点の変更候補。 |
 
-MCPの引数には`action`を含めず、表にある項目だけを渡してください。  
-CLIの`dispatch`へJSONを渡す場合は、`action`に`analyze`、`plan`、`compare`、`features`、`style_learn`、`style_review`のいずれかを指定します。
+`unslop_rewrite`はMCPサーバー側のCodexログインと実行ファイルを使います。Skillだけの利用と異なり、別途AIを呼び出します。
 
-`serve`はHTTPサーバーではなく、標準入力でMCPの要求を待つプログラムです。  
+MCPの引数には`action`を含めず、表にある項目だけを渡してください。
+CLIの`dispatch`へJSONを渡す場合は、`action`に`rewrite`、`analyze`、`plan`、`compare`、`features`、`style_learn`、`style_review`のいずれかを指定します。
+
+`serve`はHTTPサーバーではなく、標準入力でMCPの要求を待つプログラムです。
 ターミナルから起動して何も表示されなくても、クライアントが接続するまでは通常の待機状態です。
 
 ## 上限と終了コード
@@ -256,7 +329,7 @@ godd-unslop analyze article.txt --strict
 godd-unslop compare article.txt revised.txt --strict
 ```
 
-`compare --strict`は文章に差があるだけでも1を返し、悪い改稿かどうかを判定するものではありません。  
+`compare --strict`は文章に差があるだけでも1を返し、悪い改稿かどうかを判定するものではありません。
 `style-learn`で無視された例があっても、それだけで1にはなりません。
 
 ## 困ったときは
@@ -272,7 +345,7 @@ godd-unslop compare article.txt revised.txt --strict
 
 ## ライセンスと関連資料
 
-現在の公開版はGPLv3以降で提供しています。  
+現在の公開版はGPLv3以降で提供しています。
 自己保有コードの個別許諾と過去のMIT許諾は、[README](../README.md#ライセンス)、[LICENSE](../LICENSE)、[NOTICE](../NOTICE)を確認してください。
 
 データの扱いは[収集方針](data-policy.md)、過去の測定と現在の機能の違いは[評価の説明](evaluation.md)にまとめています。

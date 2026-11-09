@@ -3,6 +3,12 @@ use serde_json::{Value, json};
 pub fn tools() -> Value {
     let descriptors = [
         (
+            "unslop_rewrite",
+            "明示入力をChatGPTサブスク経由のCodex CLIで自然な日本語へ書き換え、原文と比較を返す",
+            json!({"text":{"type":"string"},"profile":{"type":"object"},"preserve":{"type":"array","items":{"type":"string"}}}),
+            vec!["text"],
+        ),
+        (
             "unslop_analyze",
             "読み手が理解しにくい表現の候補を調べる",
             json!({"text":{"type":"string"}}),
@@ -39,7 +45,7 @@ pub fn tools() -> Value {
             vec!["text", "profile"],
         ),
     ];
-    json!({"tools":descriptors.into_iter().map(|(name,description,properties,required)|json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}})).collect::<Vec<_>>()})
+    json!({"tools":descriptors.into_iter().map(|(name,description,properties,required)|json!({"name":name,"description":description,"inputSchema":{"type":"object","properties":properties,"required":required,"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":name == "unslop_rewrite"}})).collect::<Vec<_>>()})
 }
 
 #[cfg(feature = "mcp")]
@@ -55,14 +61,15 @@ mod transport {
         fn get_info(&self) -> ServerConfig {
             ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
                 .with_instructions(
-                    "指定された文章や修正例を分析し、確認する箇所や推敲の手順を返します。\n作者の判定や自動の書き換えは行いません。",
+                    "指定された文章や修正例を分析し、確認する箇所や推敲の手順を返します。\n作者の判定は行いません。unslop_rewriteは明示入力を書き換えます。意味の一致は保証しません。",
                 )
         }
         async fn list_tools(
             &self,
             _request: Option<PaginatedRequestParams>,
-            _context: RequestContext<RoleServer>,
+            context: RequestContext<RoleServer>,
         ) -> Result<ListToolsResult, ErrorData> {
+            let _ = context;
             let items: Vec<Tool> = serde_json::from_value(tools()["tools"].clone())
                 .map_err(|_| ErrorData::internal_error("tool schema", None))?;
             Ok(ListToolsResult::with_all_items(items))
@@ -70,9 +77,10 @@ mod transport {
         async fn call_tool(
             &self,
             request: CallToolRequestParams,
-            _context: RequestContext<RoleServer>,
+            context: RequestContext<RoleServer>,
         ) -> Result<CallToolResponse, ErrorData> {
             let action = match request.name.as_ref() {
+                "unslop_rewrite" => "rewrite",
                 "unslop_analyze" => "analyze",
                 "unslop_compare" => "compare",
                 "unslop_plan" => "plan",
@@ -86,7 +94,33 @@ mod transport {
                 return Err(ErrorData::invalid_params("Unexpected action", None));
             }
             arguments.insert("action".into(), json!(action));
-            Ok(match crate::dispatch(&Value::Object(arguments)) {
+            let input = Value::Object(arguments);
+            let result = if action == "rewrite" {
+                let cancel = crate::rewrite::Cancellation::default();
+                struct CancelOnDrop(crate::rewrite::Cancellation);
+                impl Drop for CancelOnDrop {
+                    fn drop(&mut self) {
+                        self.0.cancel();
+                    }
+                }
+                let guard = CancelOnDrop(cancel.clone());
+                let mut task = tokio::task::spawn_blocking(move || {
+                    crate::rewrite::run_cancelled(&input, cancel)
+                });
+                let result = tokio::select! {
+                    result = &mut task => result,
+                    _ = context.ct.cancelled() => {
+                        guard.0.cancel();
+                        task.await
+                    }
+                };
+                drop(guard);
+                result
+                    .map_err(|_| ErrorData::internal_error("AI処理の実行に失敗しました。", None))?
+            } else {
+                crate::dispatch(&input)
+            };
+            Ok(match result {
                 Ok(value) => CallToolResult::success(vec![ContentBlock::text(value.to_string())]),
                 Err(error) => CallToolResult::error(vec![ContentBlock::text(error.to_string())]),
             }
