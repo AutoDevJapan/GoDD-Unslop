@@ -82,19 +82,68 @@ fn numeric_re() -> &'static regex::Regex {
         regex::Regex::new(r"[+-]?[0-9０-９一二三四五六七八九十百千万億兆〇零]+(?:[.,．][0-9０-９]+)*(?:時間|秒|分|日|年|月|円|回|件|人|個|匹|本|枚|台|%|％)*(?:以上|以下|未満|超)?").expect("constant numeric pattern")
     })
 }
-fn quote_re() -> &'static regex::Regex {
-    static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        // A quote may wrap onto another non-empty line, including CRLF. A blank
-        // line ends its scope so an unclosed quote cannot hide later paragraphs.
-        // The closing bracket may occupy its own (otherwise empty) line.
-        regex::Regex::new(concat!(
-            r"「[^」\r\n]*(?:\r?\n[^\S\r\n]*[^\s」][^」\r\n]*)*(?:\r?\n[^\S\r\n]*)?」",
-            "|",
-            r"『[^』\r\n]*(?:\r?\n[^\S\r\n]*[^\s』][^』\r\n]*)*(?:\r?\n[^\S\r\n]*)?』",
-        ))
-        .expect("constant quote pattern")
-    })
+fn quote_ranges(text: &str, prose: &[Range<usize>]) -> Vec<Range<usize>> {
+    let prefix = usize::from(text.starts_with('\u{feff}')) * '\u{feff}'.len_utf8();
+    let mut open = Vec::new();
+    let mut quotes: Vec<Range<usize>> = Vec::new();
+    for (event, range) in parser(text).into_offset_iter() {
+        let range = range.start + prefix..range.end + prefix;
+        match event {
+            Event::Start(
+                Tag::Paragraph
+                | Tag::Item
+                | Tag::Heading { .. }
+                | Tag::CodeBlock(_)
+                | Tag::BlockQuote(_)
+                | Tag::MetadataBlock(_)
+                | Tag::HtmlBlock,
+            )
+            | Event::End(
+                TagEnd::Paragraph
+                | TagEnd::Item
+                | TagEnd::Heading(_)
+                | TagEnd::CodeBlock
+                | TagEnd::BlockQuote(_)
+                | TagEnd::MetadataBlock(_)
+                | TagEnd::HtmlBlock,
+            ) => open.clear(),
+            // CommonMark does not treat every Unicode whitespace-only line
+            // as a paragraph boundary; keep the same blank-line rule here.
+            Event::SoftBreak | Event::HardBreak
+                if text[range.end..]
+                    .split('\n')
+                    .next()
+                    .is_some_and(|s| s.trim().is_empty()) =>
+            {
+                open.clear();
+            }
+            Event::Text(_) => {
+                let index = prose.partition_point(|p| p.end <= range.start);
+                if !prose.get(index).is_some_and(|p| p == &range) {
+                    continue;
+                }
+                // Only prose delimiters form quotes. Inline code, links and
+                // headings may contain bracket examples without opening one.
+                for (offset, c) in text[range.clone()].char_indices() {
+                    let at = range.start + offset;
+                    match c {
+                        '「' => open.push(('」', at)),
+                        '『' => open.push(('』', at)),
+                        '」' | '』' if open.last().is_some_and(|(close, _)| *close == c) => {
+                            let (_, start) = open.pop().unwrap();
+                            while quotes.last().is_some_and(|q| q.start >= start) {
+                                quotes.pop();
+                            }
+                            quotes.push(start..at + c.len_utf8());
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    quotes
 }
 fn parser(text: &str) -> Parser<'_> {
     Parser::new_ext(
@@ -214,11 +263,8 @@ fn editable_ranges(ranges: Vec<Range<usize>>, protected: &mut [Range<usize>]) ->
 pub fn analyze(text: &str) -> Result<Analysis, Error> {
     check(text)?;
     let (prose, headings, lists, strong_spans) = prose_ranges(text);
-    let mut quotes: Vec<_> = quote_re()
-        .find_iter(text)
-        .chain(url_re().find_iter(text))
-        .map(|m| m.range())
-        .collect();
+    let mut quotes = quote_ranges(text, &prose);
+    quotes.extend(url_re().find_iter(text).map(|m| m.range()));
     let prose = editable_ranges(prose, &mut quotes);
     let mut findings = Vec::new();
     let mut limited = false;

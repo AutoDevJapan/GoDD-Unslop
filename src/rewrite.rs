@@ -53,7 +53,10 @@ pub fn prepare(input: &Value) -> Result<String, Error> {
 fn protected(text: &str) -> Vec<String> {
     let (prose, _, _, _) = crate::prose_ranges(text);
     // Preserve each contiguous non-prose source span, including its whitespace.
-    let mut out = Vec::new();
+    let mut out: Vec<String> = crate::quote_ranges(text, &prose)
+        .into_iter()
+        .map(|range| text[range].to_string())
+        .collect();
     let mut cursor = 0;
     for range in prose {
         if cursor < range.start {
@@ -68,7 +71,6 @@ fn protected(text: &str) -> Vec<String> {
         out.push(text[cursor..].to_string());
     }
     out.extend(crate::url_re().find_iter(text).map(|m| m.as_str().into()));
-    out.extend(crate::quote_re().find_iter(text).map(|m| m.as_str().into()));
     out
 }
 pub fn finish(input: &Value, rewritten: &str) -> Result<Value, Error> {

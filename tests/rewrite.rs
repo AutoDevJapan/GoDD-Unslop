@@ -92,11 +92,65 @@ fn wrapped_quote_emoji_is_checked_before_a_formal_rewrite() {
 
 #[test]
 fn unclosed_quote_does_not_protect_the_next_paragraph() {
-    for separator in ["\n\n", "\n  \n", "\r\n\r\n", "\r\n\t\r\n"] {
+    for separator in ["\n\n", "\n  \n", "\r\n\r\n", "\r\n\t\r\n", "\n\u{3000}\n"] {
         let original = format!("「途中の引用{separator}説明を実施します。引用の終わり。」");
         let request = json!({"text":original});
         let rewritten = original.replace("説明を実施します。", "説明します。");
         assert!(finish(&request, &rewritten).is_ok(), "{separator:?}");
+    }
+}
+
+#[test]
+fn bracket_examples_in_markdown_do_not_capture_following_prose() {
+    for (start, end) in [
+        ("開始記号は `「` です。", "終了記号は `」` です。"),
+        ("# 「見出し", "引用の終わり。」"),
+        ("[「案内](https://example.test)", "引用の終わり。」"),
+        (
+            "![「案内](https://example.test/image.png)",
+            "引用の終わり。」",
+        ),
+        ("```text\n「コード\n```", "引用の終わり。」"),
+    ] {
+        let text = format!("{start}\n本文を確認します🙂\n{end}");
+        let request = json!({"text":text,"context":{"channel":"official"}});
+        assert!(
+            godd_unslop::rewrite::needs_context(&request).is_none(),
+            "{start}"
+        );
+        assert!(
+            finish(
+                &request,
+                &text.replace("本文を確認します🙂", "本文を確かめます。")
+            )
+            .is_ok(),
+            "{start}"
+        );
+    }
+}
+
+#[test]
+fn nested_and_formatted_wrapped_quotes_remain_protected() {
+    for quote in [
+        "「**確認**しました。\n次に進みます。」",
+        "「『確認しました。』\n次に進みます。」",
+        "「`確認`しました。\n次に進みます。」",
+        "「確認しました。  \n次に進みます。」",
+        "「確認しました。\\\n次に進みます。」",
+    ] {
+        let text = format!("\u{feff}{quote}説明を実施します。");
+        let request = json!({"text":text});
+        assert!(
+            finish(
+                &request,
+                &text.replace("説明を実施します。", "説明します。")
+            )
+            .is_ok()
+        );
+        assert!(
+            finish(&request, &text.replace("次に", "先に")).is_err(),
+            "{quote}"
+        );
     }
 }
 

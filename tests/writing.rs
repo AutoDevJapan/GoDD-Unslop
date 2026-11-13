@@ -227,6 +227,20 @@ fn wrapped_quotes_hide_their_contents_but_not_surrounding_prose() {
 }
 
 #[test]
+fn code_bracket_examples_do_not_hide_the_following_paragraph_text() {
+    let text = "開始記号は `「` です。\n既定の保存先です。\n終了記号は `」` です。";
+    assert_eq!(
+        analyze(text)
+            .unwrap()
+            .findings
+            .iter()
+            .filter(|f| f.rule == "reader.ambiguous_term")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn status_check_is_prioritized_and_understands_heading_and_wide_colon() {
     let text = format!(
         "# 状態：完了\n\n{}\n\nテストは未完了です。",
