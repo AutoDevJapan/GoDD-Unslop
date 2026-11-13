@@ -117,7 +117,7 @@ pub fn finish(input: &Value, rewritten: &str) -> Result<Value, Error> {
     let layout_warnings = layout_warnings(original, rewritten);
     let nuance_warnings = nuance_warnings(original, rewritten);
     Ok(
-        json!({"status":"rewritten","original":original,"rewritten_text":rewritten,"comparison":comparison,"meaning_warnings":warnings,"layout_warnings":layout_warnings,"nuance_warnings":nuance_warnings,"semantic_equality":"not_established","backend":"codex_subscription"}),
+        json!({"status":"rewritten","original":original,"rewritten_text":rewritten,"comparison":comparison,"meaning_warnings":warnings,"layout_warnings":layout_warnings,"nuance_warnings":nuance_warnings,"runtime_warnings":[],"semantic_equality":"not_established","backend":"codex_subscription"}),
     )
 }
 const REGISTERS: [&str; 3] = ["internal_casual", "internal", "formal"];
@@ -430,6 +430,11 @@ impl Drop for Slot {
     }
 }
 const CAP: u64 = 2 * 1024 * 1024;
+#[derive(Debug)]
+struct Captured {
+    stdout: String,
+    stderr: Vec<u8>,
+}
 fn capture(
     exe: &std::path::Path,
     args: &[&str],
@@ -437,7 +442,7 @@ fn capture(
     work: &Work,
     timeout: Duration,
     cancel: &Cancellation,
-) -> Result<String, Error> {
+) -> Result<Captured, Error> {
     cancel.check()?;
     let file =
         |n: &str| fs::File::create(work.0.join(n)).map_err(|_| Error("一時ファイルを作れません。"));
@@ -454,6 +459,14 @@ fn capture(
         .stdin(fs::File::open(work.0.join("input")).map_err(|_| Error("入力を開けません。"))?)
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(err));
+    if args.first() == Some(&"exec") {
+        // Keep the known instruction warning observable even when the parent
+        // uses Codex's default error-only filter. This changes only the child.
+        cmd.env(
+            "RUST_LOG",
+            "error,opentelemetry_sdk=off,opentelemetry_otlp=off,codex_core::agents_md=warn",
+        );
+    }
     for key in [
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -513,16 +526,109 @@ fn capture(
     let _ = child.kill();
     let _ = child.wait();
     result?;
-    let mut bytes = Vec::new();
-    fs::File::open(work.0.join("output"))
-        .map_err(|_| Error("出力を開けません。"))?
-        .take(CAP + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| Error("出力を読めません。"))?;
-    if bytes.len() as u64 > CAP {
-        return Err(Error("出力上限を超えました。"));
+    let read = |name: &str| {
+        let mut bytes = Vec::new();
+        fs::File::open(work.0.join(name))
+            .map_err(|_| Error("出力を開けません。"))?
+            .take(CAP + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| Error("出力を読めません。"))?;
+        if bytes.len() as u64 > CAP {
+            return Err(Error("出力上限を超えました。"));
+        }
+        Ok(bytes)
+    };
+    Ok(Captured {
+        stdout: String::from_utf8(read("output")?)
+            .map_err(|_| Error("AI出力がUTF-8ではありません。"))?,
+        stderr: read("error")?,
+    })
+}
+
+// Match only known diagnostics from the trusted process, never forward their text.
+fn skills_budget_warning(message: &str) -> bool {
+    if message
+        == "Exceeded skills context budget. Some skills were not included in the model-visible skills list."
+    {
+        return true;
     }
-    String::from_utf8(bytes).map_err(|_| Error("AI出力がUTF-8ではありません。"))
+    let Some(rest) = message
+        .strip_prefix("Exceeded skills context budget. All skill descriptions were removed and ")
+    else {
+        return false;
+    };
+    let Some((count, suffix)) = rest.split_once(' ') else {
+        return false;
+    };
+    !count.is_empty()
+        && count.bytes().all(|b| b.is_ascii_digit())
+        && matches!(
+            suffix,
+            "additional skill was not included in the model-visible skills list."
+                | "additional skills were not included in the model-visible skills list."
+        )
+}
+
+fn diagnostic<'a>(line: &'a str, level: &str, module: &str) -> Option<&'a str> {
+    let mut fields = line.splitn(2, char::is_whitespace);
+    let first = fields.next()?;
+    let rest = if first == level {
+        fields.next()?.trim_start()
+    } else {
+        // Codex's plain tracing format starts with an RFC3339 UTC timestamp.
+        if first.len() < 20
+            || !first.ends_with('Z')
+            || !first
+                .bytes()
+                .all(|b| b.is_ascii_digit() || b"-:.TZ".contains(&b))
+        {
+            return None;
+        }
+        fields
+            .next()?
+            .trim_start()
+            .strip_prefix(level)?
+            .strip_prefix(' ')?
+            .trim_start()
+    };
+    let rest = if let Some(span) = rest.strip_prefix("agents_md.load{max_total=") {
+        let (limit, rest) = span.split_once("}:")?;
+        if limit.is_empty() || !limit.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        rest.trim_start()
+    } else {
+        rest
+    };
+    rest.strip_prefix(module)?.strip_prefix(": ")
+}
+
+fn runtime_warnings(stdout: &str, stderr: &[u8]) -> Vec<Value> {
+    let skills_budget = stdout.lines().any(|line| {
+        serde_json::from_str::<Value>(line).is_ok_and(|event| {
+            event["type"] == "item.completed"
+                && event["item"]["type"] == "error"
+                && event["item"]["message"]
+                    .as_str()
+                    .is_some_and(skills_budget_warning)
+        })
+    });
+    let stderr = String::from_utf8_lossy(stderr);
+    let scan_limit = stderr.lines().any(|line| {
+        diagnostic(line, "ERROR", "codex_skills_extension::loader::host").is_some_and(|message| {
+            message.starts_with("skills scan reached its traversal limit (root: ")
+        })
+    });
+    let instructions_truncated = stderr.lines().any(|line| {
+        diagnostic(line, "WARN", "codex_core::agents_md").is_some_and(|message| {
+            message.starts_with("project doc exceeds remaining budget; truncating ")
+        })
+    });
+    [
+        (skills_budget, "skills_context_budget", "Codexの初期Skill一覧が省略されています。Skillが自動で選ばれない場合があります。"),
+        (scan_limit, "skills_scan_limit", "CodexがSkillを探す処理の上限に達しました。一部のSkillを見つけられていない可能性があります。"),
+        (instructions_truncated, "project_instructions_truncated", "Codexが読み込む指示ファイルの一部が省略されています。必要な方針が改稿に反映されているか確認してください。"),
+    ].into_iter().filter(|(present, _, _)| *present).map(|(_, id, message)| json!({"id":id,"message":message})).collect()
 }
 fn subscription_login(status: &str) -> bool {
     status
@@ -552,8 +658,11 @@ pub(crate) fn run_cancelled(input: &Value, cancel: Cancellation) -> Result<Value
         &cancel,
     )?;
     // Codex writes login status to stderr on some releases.
-    let err = fs::read_to_string(work.0.join("error")).unwrap_or_default();
-    if !subscription_login(&format!("{status}{err}")) {
+    if !subscription_login(&format!(
+        "{}{}",
+        status.stdout,
+        String::from_utf8_lossy(&status.stderr)
+    )) {
         return Err(Error(
             "ChatGPTサブスクのCodexログインが必要です。APIキー経由では実行しません。",
         ));
@@ -568,6 +677,8 @@ pub(crate) fn run_cancelled(input: &Value, cancel: Cancellation) -> Result<Value
             "--sandbox",
             "read-only",
             "--json",
+            "--color",
+            "never",
             "--model",
             "gpt-6.1-sol",
             "-c",
@@ -590,7 +701,7 @@ pub(crate) fn run_cancelled(input: &Value, cancel: Cancellation) -> Result<Value
         &cancel,
     )?;
     let mut answer = None;
-    for line in raw.lines() {
+    for line in raw.stdout.lines() {
         if let Ok(v) = serde_json::from_str::<Value>(line)
             && v["type"] == "item.completed"
             && v["item"]["type"] == "agent_message"
@@ -598,10 +709,12 @@ pub(crate) fn run_cancelled(input: &Value, cancel: Cancellation) -> Result<Value
             answer = v["item"]["text"].as_str().map(str::to_owned);
         }
     }
-    finish(
+    let mut result = finish(
         input,
         &answer.ok_or(Error("AIから改稿本文が返りませんでした。"))?,
-    )
+    )?;
+    result["runtime_warnings"] = json!(runtime_warnings(&raw.stdout, &raw.stderr));
+    Ok(result)
 }
 #[cfg(windows)]
 mod process_group {
@@ -745,6 +858,10 @@ mod process_tests {
             std::io::stdout()
                 .write_all(&vec![b'x'; CAP as usize + 1024])
                 .unwrap();
+        } else if mode == "flood_stderr" {
+            std::io::stderr()
+                .write_all(&vec![b'x'; CAP as usize + 1024])
+                .unwrap();
         } else if mode == "fail" {
             std::process::exit(7);
         } else if mode == "sleep" {
@@ -799,6 +916,7 @@ mod process_tests {
             timeout,
             cancel,
         )
+        .map(|captured| captured.stdout)
     }
     #[test]
     fn subprocess_success_failure_and_output_limit() {
@@ -816,6 +934,12 @@ mod process_tests {
         );
         assert!(
             invoke("flood", Duration::from_secs(5), &cancel)
+                .unwrap_err()
+                .0
+                .contains("上限")
+        );
+        assert!(
+            invoke("flood_stderr", Duration::from_secs(5), &cancel)
                 .unwrap_err()
                 .0
                 .contains("上限")
@@ -857,5 +981,36 @@ mod process_tests {
         drop(first);
         assert!(Slot::acquire().is_ok());
         drop(second);
+    }
+
+    #[test]
+    fn warning_classifier_ignores_unrecognized_or_non_diagnostic_content() {
+        let message = "Exceeded skills context budget. Some skills were not included in the model-visible skills list.";
+        for text in [
+            "not JSON".to_string(),
+            json!({"type":"item.completed","item":{"type":"agent_message","text":message}}).to_string(),
+            json!({"type":"item.started","item":{"type":"error","message":message}}).to_string(),
+            json!({"type":"item.completed","item":{"type":"error","message":format!("{message} private-synthetic-value")}}).to_string(),
+        ] {
+            assert!(runtime_warnings(&text, b"unknown stderr").is_empty());
+        }
+        let stderr = b"private-synthetic-value\xff\nWARN unrelated: project doc exceeds remaining budget; truncating\n";
+        assert!(runtime_warnings("", stderr).is_empty());
+        assert!(runtime_warnings("", b"quoted text: ERROR codex_skills_extension::loader::host: skills scan reached its traversal limit (root: file:///synthetic)\nquoted text: WARN codex_core::agents_md: project doc exceeds remaining budget; truncating path=synthetic\n").is_empty());
+        for count in ["1", "399"] {
+            let noun = if count == "1" {
+                "skill was"
+            } else {
+                "skills were"
+            };
+            let text = format!(
+                "Exceeded skills context budget. All skill descriptions were removed and {count} additional {noun} not included in the model-visible skills list."
+            );
+            assert!(skills_budget_warning(&text));
+        }
+        assert!(!skills_budget_warning(
+            "Exceeded skills context budget. All skill descriptions were removed and secret additional skills were not included in the model-visible skills list."
+        ));
+        assert!(runtime_warnings("", b"WARN arbitrary{max_total=32768}: codex_core::agents_md: project doc exceeds remaining budget; truncating path=synthetic\nWARN agents_md.load{max_total=secret}: codex_core::agents_md: project doc exceeds remaining budget; truncating path=synthetic\n").is_empty());
     }
 }

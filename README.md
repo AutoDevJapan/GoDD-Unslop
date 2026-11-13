@@ -67,6 +67,7 @@ godd-unslop rewrite rewrite-request.json
 ```
 
 結果の`rewritten_text`が改稿、`comparison`が原文との比較、`meaning_warnings`と`layout_warnings`が確認すべき点です。
+`runtime_warnings`が空でない場合は、Codexが一部のSkillや指示を読み込めなかった可能性があります。改稿が成功していても、必要な方針が反映されているか確認してください。
 改行は同じ話題の中の意味の区切り、空行は話題が変わる距離として扱い、原文の段落を必要なく詰めないようにしています。
 元ファイルは書き換えません。条件や責任主体が変わっていないか、採用前に原文と読み比べてください。
 APIキーは使いません。実行ファイル指定や認証の確認は[AI改稿の手順](docs/user-guide.md#codex-cliで文章を書き直す)を参照してください。
