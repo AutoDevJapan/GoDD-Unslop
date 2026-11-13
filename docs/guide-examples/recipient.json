@@ -1,0 +1,11 @@
+{
+  "id": "colleague-1",
+  "label": "架空の同僚",
+  "confirmed": true,
+  "source": "本人が確認した架空のサンプル",
+  "context": {
+    "recipient": {"relation": "peer", "closeness": "close"},
+    "channel": "chat",
+    "tone": {"formality": 2, "warmth": 3, "directness": 2, "emoji": "light"}
+  }
+}

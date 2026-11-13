@@ -1,0 +1,10 @@
+{
+  "text": "確認を実施しました。結果は問題なしです。",
+  "context": {
+    "purpose": "確認結果の報告",
+    "recipient": {"relation": "superior", "closeness": "normal"},
+    "register": "formal",
+    "channel": "report",
+    "tone": {"formality": 3, "warmth": 1, "directness": 2, "emoji": "none"}
+  }
+}

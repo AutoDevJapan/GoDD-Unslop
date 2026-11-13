@@ -8,6 +8,10 @@
 | `revised.txt` | `godd-unslop compare article.txt revised.txt`で原文と比べます。 |
 | `plan-request.json` | `godd-unslop dispatch plan-request.json`で用途付きの推敲手順を確認します。 |
 | `learn-request.json` | `godd-unslop style-learn learn-request.json`で改行と空行の修正例を学習します。 |
+| `rewrite-request.json` | `godd-unslop rewrite rewrite-request.json`で架空の確認報告をAIで改稿します。ChatGPTログインが必要です。 |
+| `recipient.json` | `godd-unslop relationship-put recipient.json`で架空の同僚の設定を保存します。 |
+| `recipient-request.json` | `godd-unslop context-for colleague-1 recipient-request.json`で保存した相手の設定を確認します。`rewrite-for`での改稿はAIへ送信します。 |
+| `style-review-request.json` | `godd-unslop style-review style-review-request.json`で、文章と保存設定を渡す形を試します。 |
 
 実行ファイルのインストール後、これらのファイルを自分の作業フォルダーへコピーして使ってください。  
 設定の保存・再利用・追加の手順は[文章版ユーザーガイド](../user-guide.md#改行と空行を修正例から学ぶ)にあります。

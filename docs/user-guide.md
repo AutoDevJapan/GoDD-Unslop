@@ -1,6 +1,6 @@
 # GoDD Unslop ユーザーガイド
 
-[PowerPoint版](user-guide.pptx)は従来の分析・比較・修正例の保存を説明する20枚です。AI改稿とSkill導入、追加されたMCPツールは未反映のため、この文章版を参照してください。
+[PowerPoint版](user-guide.pptx)は、AI改稿・Skill導入・相手別の設定・改行の好みを図で説明する26枚です。[ADJ共通テンプレート](templates/)も同梱しています。
 操作例で使うファイルは[サンプルフォルダー](guide-examples/)から入手できます。
 
 GoDD Unslopは、文章を見直す候補と推敲の手順を返すツールです。

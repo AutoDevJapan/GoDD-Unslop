@@ -9,7 +9,7 @@ GoDD Unslopは「既定」という言葉を見つけ、保存先を具体的に
 指摘された言葉を、すべて直す必要はありません。
 前後の説明を読めば保存先が分かるなら、そのままで構いません。
 
-[図解ガイド（PowerPoint）](docs/user-guide.pptx)は従来の分析・比較・修正例の保存を説明する版で、AI改稿とSkill導入は含みません。
+[図解ガイド（PowerPoint）](docs/user-guide.pptx)では、AI改稿・Skill導入・相手別の設定・改行の好みを、操作の流れと例で説明しています。[ADJ共通スライドテンプレート](docs/templates/)も再利用できます。
 実際に試すときは、[文章版のユーザーガイド](docs/user-guide.md)と[サンプルファイル](docs/guide-examples/)を使ってください。
 
 ## まず使ってみる
