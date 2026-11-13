@@ -18,6 +18,74 @@ fn cli(args: &[&str], text: &[u8]) -> std::process::Output {
 }
 
 #[test]
+fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
+    let root = std::env::temp_dir().join(format!(
+        "unslop-model-contract-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&root).unwrap();
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(root.clone());
+    let fixture = root.join(if cfg!(windows) {
+        "codex-contract.exe"
+    } else {
+        "codex-contract"
+    });
+    let mut compiler = Command::new("rustc");
+    compiler
+        .args(["--edition=2024", "--crate-name", "codex_contract"])
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/codex_contract.rs"
+        ))
+        .arg("-o")
+        .arg(&fixture);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        compiler.creation_flags(0x08000000);
+    }
+    let compiled = compiler.output().unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let mut child = Command::new(env!("CARGO_BIN_EXE_godd-unslop"))
+        .arg("rewrite")
+        .env("GODD_UNSLOP_CODEX", fixture)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(br#"{"text":"\u4fdd\u5b58\u3057\u307e\u3057\u305f\u3002"}"#)
+        .unwrap();
+    let result = child.wait_with_output().unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let result: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(result["status"], "rewritten");
+    assert_eq!(result["rewritten_text"], "保存しました。");
+}
+
+#[test]
 fn cli_uses_real_exit_codes_and_rejects_non_utf8() {
     assert_eq!(
         cli(&["analyze", "--strict"], "確認しました。".as_bytes())

@@ -57,6 +57,7 @@ CLIを使えない環境でも[Skill本文](distribution/godd-unslop-SKILL.md)�
 
 既存の文章の改稿をJSONで受け取りたい場合に使います。Codex CLIを導入し、ChatGPTサブスクのアカウントでログインしておきます。
 APIキーのログインでは実行しません。利用枠が足りない場合は、その契約の利用状況を確認してください。
+改稿には`gpt-6.1-sol`を使い、推論強度を`max`、速度設定を`fast`として呼び出します。Codex側のユーザー設定は読み込みません。
 
 起動側で`GODD_UNSLOP_CODEX`を設定すると、呼び出す実行ファイルを指定できます。指定できるのは、運用者が信頼して選んだCodex実行ファイルです。入力JSONから実行先を選ぶことはできません。
 未指定ならWindowsでは`codex.exe`、macOS・Linuxでは`codex`をPATHから探します。
