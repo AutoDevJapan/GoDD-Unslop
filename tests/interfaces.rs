@@ -40,7 +40,8 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
     } else {
         "codex-contract"
     });
-    let mut compiler = Command::new("rustc");
+    // Cargo test needs a Rust toolchain; RUSTC also supports a custom compiler path.
+    let mut compiler = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()));
     compiler
         .args(["--edition=2024", "--crate-name", "codex_contract"])
         .arg(concat!(
@@ -54,7 +55,9 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
         use std::os::windows::process::CommandExt;
         compiler.creation_flags(0x08000000);
     }
-    let compiled = compiler.output().unwrap();
+    let compiled = compiler
+        .output()
+        .expect("the contract fixture requires rustc on PATH or RUSTC");
     assert!(
         compiled.status.success(),
         "{}",
@@ -63,6 +66,10 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
     let mut child = Command::new(env!("CARGO_BIN_EXE_godd-unslop"))
         .arg("rewrite")
         .env("GODD_UNSLOP_CODEX", fixture)
+        .env(
+            "UNSLOP_TEST_CONTRACT_FAILURE",
+            root.join("missing-contract"),
+        )
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -77,7 +84,9 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
     let result = child.wait_with_output().unwrap();
     assert!(
         result.status.success(),
-        "{}",
+        "contract field: {}; {}",
+        std::fs::read_to_string(root.join("missing-contract"))
+            .unwrap_or_else(|_| "none reported".into()),
         String::from_utf8_lossy(&result.stderr)
     );
     let result: Value = serde_json::from_slice(&result.stdout).unwrap();

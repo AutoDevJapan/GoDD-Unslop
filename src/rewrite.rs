@@ -573,7 +573,7 @@ pub(crate) fn run_cancelled(input: &Value, cancel: Cancellation) -> Result<Value
             "-c",
             "model_reasoning_effort=\"max\"",
             "-c",
-            "service_tier=\"fast\"",
+            "service_tier=\"priority\"",
             "-c",
             "forced_login_method=\"chatgpt\"",
             "-c",
