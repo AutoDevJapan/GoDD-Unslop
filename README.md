@@ -42,7 +42,8 @@ godd-unslop analyze article.txt
 
 `install-skill`には、利用するアプリが読み込むSkillのルートフォルダーを指定します。その下に`godd-unslop/SKILL.md`を保存します。
 [導入手順](docs/user-guide.md#aiに文章を書いてもらうためのskillを入れる)に、保存先と使い始め方を載せています。
-導入したAIには「godd-unslopのSkillを使って、利用者への変更案内を書いて」のように依頼し、読者と必要な事実を伝えてください。
+Codexでは、依頼の先頭に`$godd-unslop`を付け、読者と必要な事実を伝えてください。
+導入しただけで毎回自動的に選ばれるとは限らないため、まずはSkillを指定して使い始めます。
 
 ## 手元の文章をAIで書き直す
 
