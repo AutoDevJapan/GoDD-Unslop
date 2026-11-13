@@ -3,6 +3,8 @@
 [PowerPoint版](user-guide.pptx)は、AI改稿・Skill導入・相手別の設定・改行の好みを図で説明する26枚です。[ADJ共通テンプレート](templates/)も同梱しています。
 操作例で使うファイルは[サンプルフォルダー](guide-examples/)から入手できます。
 
+[全26枚の一覧画像](guide-assets/slide-overview.webp)で、ガイドの内容をまとめて確認できます。
+
 GoDD Unslopは、文章を見直す候補と推敲の手順を返すツールです。
 Skillで下書きから書き方を整える方法と、Codex CLIで既存の文章を改稿する方法があります。分析機能だけを使い、自分で修正を選ぶこともできます。
 
