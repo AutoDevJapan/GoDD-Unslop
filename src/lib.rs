@@ -83,8 +83,21 @@ fn numeric_re() -> &'static regex::Regex {
     })
 }
 fn quote_ranges(text: &str, prose: &[Range<usize>]) -> Vec<Range<usize>> {
+    quote_ranges_with_ascii(text, prose, false)
+}
+fn quote_ranges_with_ascii(
+    text: &str,
+    prose: &[Range<usize>],
+    include_ascii: bool,
+) -> Vec<Range<usize>> {
     let prefix = usize::from(text.starts_with('\u{feff}')) * '\u{feff}'.len_utf8();
     let mut open = Vec::new();
+    let mut open_counts = [0usize; 4];
+    let urls: Vec<_> = if include_ascii {
+        url_re().find_iter(text).map(|m| m.range()).collect()
+    } else {
+        Vec::new()
+    };
     let mut quotes: Vec<Range<usize>> = Vec::new();
     for (event, range) in parser(text).into_offset_iter() {
         let range = range.start + prefix..range.end + prefix;
@@ -106,16 +119,20 @@ fn quote_ranges(text: &str, prose: &[Range<usize>]) -> Vec<Range<usize>> {
                 | TagEnd::BlockQuote(_)
                 | TagEnd::MetadataBlock(_)
                 | TagEnd::HtmlBlock,
-            ) => open.clear(),
+            ) => {
+                open.clear();
+                open_counts.fill(0);
+            }
             // CommonMark does not treat every Unicode whitespace-only line
             // as a paragraph boundary; keep the same blank-line rule here.
             Event::SoftBreak | Event::HardBreak
                 if text[range.end..]
-                    .split('\n')
+                    .split(['\r', '\n'])
                     .next()
                     .is_some_and(|s| s.trim().is_empty()) =>
             {
                 open.clear();
+                open_counts.fill(0);
             }
             Event::Text(_) => {
                 let index = prose.partition_point(|p| p.end <= range.start);
@@ -126,17 +143,46 @@ fn quote_ranges(text: &str, prose: &[Range<usize>]) -> Vec<Range<usize>> {
                 // headings may contain bracket examples without opening one.
                 for (offset, c) in text[range.clone()].char_indices() {
                     let at = range.start + offset;
-                    match c {
-                        '「' => open.push(('」', at)),
-                        '『' => open.push(('』', at)),
-                        '」' | '』' if open.last().is_some_and(|(close, _)| *close == c) => {
-                            let (_, start) = open.pop().unwrap();
-                            while quotes.last().is_some_and(|q| q.start >= start) {
-                                quotes.pop();
-                            }
-                            quotes.push(start..at + c.len_utf8());
+                    let url_index = urls.partition_point(|u| u.end <= at);
+                    if urls.get(url_index).is_some_and(|u| u.contains(&at)) {
+                        continue;
+                    }
+                    if c == '\''
+                        && text[..at]
+                            .chars()
+                            .next_back()
+                            .is_some_and(char::is_alphanumeric)
+                        && text[at + 1..]
+                            .chars()
+                            .next()
+                            .is_some_and(char::is_alphanumeric)
+                    {
+                        continue;
+                    }
+                    let (kind, opening) = match c {
+                        '「' => (0, true),
+                        '『' => (1, true),
+                        '」' => (0, false),
+                        '』' => (1, false),
+                        '"' if include_ascii => (2, open_counts[2] == 0),
+                        '\'' if include_ascii => (3, open_counts[3] == 0),
+                        _ => continue,
+                    };
+                    if opening {
+                        open.push((kind, at));
+                        open_counts[kind] += 1;
+                    } else if open_counts[kind] != 0 {
+                        // Recover the matching outer quote after an unclosed inner one.
+                        // Counts avoid rescanning the stack for repeated unmatched closers.
+                        let index = open.iter().rposition(|(k, _)| *k == kind).unwrap();
+                        let start = open[index].1;
+                        for (discarded, _) in open.drain(index..) {
+                            open_counts[discarded] -= 1;
                         }
-                        _ => {}
+                        while quotes.last().is_some_and(|q| q.start >= start) {
+                            quotes.pop();
+                        }
+                        quotes.push(start..at + c.len_utf8());
                     }
                 }
             }

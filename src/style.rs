@@ -256,41 +256,7 @@ fn layout_findings(text: &str, p: &StyleProfile) -> (Vec<Value>, bool) {
 }
 fn protected_prose(text: &str) -> Vec<std::ops::Range<usize>> {
     let (ranges, _, _, _) = crate::prose_ranges(text);
-    let mut protected: Vec<_> = crate::url_re().find_iter(text).map(|m| m.range()).collect();
-    let mut open: Option<(char, usize)> = None;
-    for (i, c) in text.char_indices() {
-        if !ranges.iter().any(|r| r.contains(&i)) || protected.iter().any(|r| r.contains(&i)) {
-            continue;
-        }
-        if c == '\n' && text[i..].starts_with("\n\n") {
-            open = None;
-        }
-        if c == '\''
-            && text[..i]
-                .chars()
-                .next_back()
-                .is_some_and(char::is_alphanumeric)
-            && text[i + 1..]
-                .chars()
-                .next()
-                .is_some_and(char::is_alphanumeric)
-        {
-            continue;
-        }
-        if let Some((close, start)) = open {
-            if c == close {
-                protected.push(start..i + c.len_utf8());
-                open = None;
-            }
-        } else if let Some(close) = match c {
-            '「' => Some('」'),
-            '『' => Some('』'),
-            '"' => Some('"'),
-            '\'' => Some('\''),
-            _ => None,
-        } {
-            open = Some((close, i));
-        }
-    }
+    let mut protected = crate::quote_ranges_with_ascii(text, &ranges, true);
+    protected.extend(crate::url_re().find_iter(text).map(|m| m.range()));
     crate::editable_ranges(ranges, &mut protected)
 }

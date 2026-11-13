@@ -210,6 +210,19 @@ fn a_missing_quote_does_not_hide_other_paragraphs() {
 }
 
 #[test]
+fn review_mismatched_inner_quote_keeps_analysis_outside_the_outer_quote() {
+    let text = "「既定『の保存先」通常」既定の保存先です。";
+    let ambiguous: Vec<_> = analyze(text)
+        .unwrap()
+        .findings
+        .into_iter()
+        .filter(|f| f.rule == "reader.ambiguous_term")
+        .collect();
+    assert_eq!(ambiguous.len(), 1);
+    assert_eq!(ambiguous[0].start.byte, text.rfind("既定").unwrap());
+}
+
+#[test]
 fn wrapped_quotes_hide_their_contents_but_not_surrounding_prose() {
     for text in [
         "「既定の保存先です。\n次に確認します。」既定の保存先を案内します。",

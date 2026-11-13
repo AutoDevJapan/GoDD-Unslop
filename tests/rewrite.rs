@@ -57,6 +57,58 @@ fn protected_code_whitespace_is_exact() {
 }
 
 #[test]
+fn review_mismatched_inner_quote_keeps_the_matching_outer_quote() {
+    for quote in ["「A『B」C」", "『A「B』C』"] {
+        let original = format!("{quote}説明を実施します。");
+        let request = json!({"text":original});
+        assert!(finish(&request, &original.replace("実施します", "します")).is_ok());
+        assert!(finish(&request, &original.replace('A', "X")).is_err());
+        assert!(finish(&request, &original.replace('B', "X")).is_err());
+        assert!(finish(&request, &original.replace('C', "X")).is_ok());
+    }
+    let request =
+        json!({"text":"「確認『🙂」説明を実施します。", "context":{"channel":"official"}});
+    assert_eq!(
+        godd_unslop::rewrite::needs_context(&request).unwrap()["missing"],
+        json!(["protected_emoji"])
+    );
+}
+
+#[test]
+fn review_quote_boundaries_cover_cr_and_unicode_whitespace_lines() {
+    for separator in [
+        "\r\r",
+        "\r\u{3000}\r",
+        "\r\u{a0}\r",
+        "\r\n\u{a0}\r\n",
+        "\n\u{2003}\n",
+    ] {
+        let original = format!("「途中の引用{separator}説明を実施します。」");
+        assert!(
+            finish(
+                &json!({"text":original}),
+                &original.replace("実施します", "します")
+            )
+            .is_ok(),
+            "{separator:?}"
+        );
+    }
+    // U+200B is a character rather than Unicode whitespace: the quote stays intact.
+    let original = "「確認しました。\n\u{200b}\n次に進みます。」";
+    assert!(finish(&json!({"text":original}), &original.replace("次に", "先に")).is_err());
+}
+
+#[test]
+fn review_prompt_and_list_quotes_preserve_exact_layout() {
+    let original = "- 「確認しました。\r\n  次に進みます。」\r\n\r\n説明を実施します。";
+    let request = json!({"text":original});
+    let prompt = prepare(&request).unwrap();
+    assert!(prompt.contains("引用内の表記・改行コード・字下げ・空白は原文どおり"));
+    assert!(finish(&request, &original.replace("実施します", "します")).is_ok());
+    assert!(finish(&request, &original.replace("\r\n  次に", "\r\n次に")).is_err());
+}
+
+#[test]
 fn wrapped_japanese_quotes_keep_their_words_and_line_breaks() {
     for quote in [
         "「確認しました。\n次に進みます。」",
