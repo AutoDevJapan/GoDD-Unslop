@@ -210,6 +210,23 @@ fn a_missing_quote_does_not_hide_other_paragraphs() {
 }
 
 #[test]
+fn wrapped_quotes_hide_their_contents_but_not_surrounding_prose() {
+    for text in [
+        "「既定の保存先です。\n次に確認します。」既定の保存先を案内します。",
+        "『既定の保存先です。\r\n次に確認します。』既定の保存先を案内します。",
+    ] {
+        let report = analyze(text).unwrap();
+        let ambiguous: Vec<_> = report
+            .findings
+            .iter()
+            .filter(|f| f.rule == "reader.ambiguous_term")
+            .collect();
+        assert_eq!(ambiguous.len(), 1);
+        assert_eq!(ambiguous[0].start.byte, text.rfind("既定").unwrap());
+    }
+}
+
+#[test]
 fn status_check_is_prioritized_and_understands_heading_and_wide_colon() {
     let text = format!(
         "# 状態：完了\n\n{}\n\nテストは未完了です。",

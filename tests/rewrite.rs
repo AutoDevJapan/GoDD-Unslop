@@ -57,6 +57,50 @@ fn protected_code_whitespace_is_exact() {
 }
 
 #[test]
+fn wrapped_japanese_quotes_keep_their_words_and_line_breaks() {
+    for quote in [
+        "「確認しました。\n次に進みます。」",
+        "『確認しました。\r\n次に進みます。』",
+        "「確認しました。\n  次に進みます。\n」",
+    ] {
+        let original = format!("引用は{quote}です。説明を実施します。");
+        let request = json!({"text":original});
+        assert!(finish(&request, &format!("引用は{quote}です。説明します。")).is_ok());
+        for changed in [
+            quote.replace("次に", "先に"),
+            quote.replace(['\r', '\n'], ""),
+        ] {
+            assert!(
+                finish(&request, &format!("引用は{changed}です。説明します。")).is_err(),
+                "changed quote was accepted: {changed}"
+            );
+        }
+    }
+}
+
+#[test]
+fn wrapped_quote_emoji_is_checked_before_a_formal_rewrite() {
+    let request = json!({
+        "text":"お客様の声は「確認しました。\nありがとうございます🙂」です。",
+        "context":{"channel":"official"}
+    });
+    assert_eq!(
+        godd_unslop::rewrite::needs_context(&request).unwrap()["missing"],
+        json!(["protected_emoji"])
+    );
+}
+
+#[test]
+fn unclosed_quote_does_not_protect_the_next_paragraph() {
+    for separator in ["\n\n", "\n  \n", "\r\n\r\n", "\r\n\t\r\n"] {
+        let original = format!("「途中の引用{separator}説明を実施します。引用の終わり。」");
+        let request = json!({"text":original});
+        let rewritten = original.replace("説明を実施します。", "説明します。");
+        assert!(finish(&request, &rewritten).is_ok(), "{separator:?}");
+    }
+}
+
+#[test]
 fn prompt_reuses_skill_layout_guidance_without_universal_rules() {
     let prompt = prepare(&json!({"text":"確認しました。次に進みます。"})).unwrap();
     let guidance = godd_unslop::skill::layout_guidance();

@@ -85,7 +85,15 @@ fn numeric_re() -> &'static regex::Regex {
 fn quote_re() -> &'static regex::Regex {
     static RE: OnceLock<regex::Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        regex::Regex::new("「[^」\\r\\n]*」|『[^』\\r\\n]*』").expect("constant quote pattern")
+        // A quote may wrap onto another non-empty line, including CRLF. A blank
+        // line ends its scope so an unclosed quote cannot hide later paragraphs.
+        // The closing bracket may occupy its own (otherwise empty) line.
+        regex::Regex::new(concat!(
+            r"「[^」\r\n]*(?:\r?\n[^\S\r\n]*[^\s」][^」\r\n]*)*(?:\r?\n[^\S\r\n]*)?」",
+            "|",
+            r"『[^』\r\n]*(?:\r?\n[^\S\r\n]*[^\s』][^』\r\n]*)*(?:\r?\n[^\S\r\n]*)?』",
+        ))
+        .expect("constant quote pattern")
     })
 }
 fn parser(text: &str) -> Parser<'_> {
