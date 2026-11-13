@@ -57,6 +57,156 @@ fn protected_code_whitespace_is_exact() {
 }
 
 #[test]
+fn review_mismatched_inner_quote_keeps_the_matching_outer_quote() {
+    for quote in ["「A『B」C」", "『A「B』C』"] {
+        let original = format!("{quote}説明を実施します。");
+        let request = json!({"text":original});
+        assert!(finish(&request, &original.replace("実施します", "します")).is_ok());
+        assert!(finish(&request, &original.replace('A', "X")).is_err());
+        assert!(finish(&request, &original.replace('B', "X")).is_err());
+        assert!(finish(&request, &original.replace('C', "X")).is_ok());
+    }
+    let request =
+        json!({"text":"「確認『🙂」説明を実施します。", "context":{"channel":"official"}});
+    assert_eq!(
+        godd_unslop::rewrite::needs_context(&request).unwrap()["missing"],
+        json!(["protected_emoji"])
+    );
+}
+
+#[test]
+fn review_quote_boundaries_cover_cr_and_unicode_whitespace_lines() {
+    for separator in [
+        "\r\r",
+        "\r\u{3000}\r",
+        "\r\u{a0}\r",
+        "\r\n\u{a0}\r\n",
+        "\n\u{2003}\n",
+    ] {
+        let original = format!("「途中の引用{separator}説明を実施します。」");
+        assert!(
+            finish(
+                &json!({"text":original}),
+                &original.replace("実施します", "します")
+            )
+            .is_ok(),
+            "{separator:?}"
+        );
+    }
+    // U+200B is a character rather than Unicode whitespace: the quote stays intact.
+    let original = "「確認しました。\n\u{200b}\n次に進みます。」";
+    assert!(finish(&json!({"text":original}), &original.replace("次に", "先に")).is_err());
+}
+
+#[test]
+fn review_prompt_and_list_quotes_preserve_exact_layout() {
+    let original = "- 「確認しました。\r\n  次に進みます。」\r\n\r\n説明を実施します。";
+    let request = json!({"text":original});
+    let prompt = prepare(&request).unwrap();
+    assert!(prompt.contains("引用内の表記・改行コード・字下げ・空白は原文どおり"));
+    assert!(finish(&request, &original.replace("実施します", "します")).is_ok());
+    assert!(finish(&request, &original.replace("\r\n  次に", "\r\n次に")).is_err());
+}
+
+#[test]
+fn wrapped_japanese_quotes_keep_their_words_and_line_breaks() {
+    for quote in [
+        "「確認しました。\n次に進みます。」",
+        "『確認しました。\r\n次に進みます。』",
+        "「確認しました。\n  次に進みます。\n」",
+    ] {
+        let original = format!("引用は{quote}です。説明を実施します。");
+        let request = json!({"text":original});
+        assert!(finish(&request, &format!("引用は{quote}です。説明します。")).is_ok());
+        for changed in [
+            quote.replace("次に", "先に"),
+            quote.replace(['\r', '\n'], ""),
+        ] {
+            assert!(
+                finish(&request, &format!("引用は{changed}です。説明します。")).is_err(),
+                "changed quote was accepted: {changed}"
+            );
+        }
+    }
+}
+
+#[test]
+fn wrapped_quote_emoji_is_checked_before_a_formal_rewrite() {
+    let request = json!({
+        "text":"お客様の声は「確認しました。\nありがとうございます🙂」です。",
+        "context":{"channel":"official"}
+    });
+    assert_eq!(
+        godd_unslop::rewrite::needs_context(&request).unwrap()["missing"],
+        json!(["protected_emoji"])
+    );
+}
+
+#[test]
+fn unclosed_quote_does_not_protect_the_next_paragraph() {
+    for separator in ["\n\n", "\n  \n", "\r\n\r\n", "\r\n\t\r\n", "\n\u{3000}\n"] {
+        let original = format!("「途中の引用{separator}説明を実施します。引用の終わり。」");
+        let request = json!({"text":original});
+        let rewritten = original.replace("説明を実施します。", "説明します。");
+        assert!(finish(&request, &rewritten).is_ok(), "{separator:?}");
+    }
+}
+
+#[test]
+fn bracket_examples_in_markdown_do_not_capture_following_prose() {
+    for (start, end) in [
+        ("開始記号は `「` です。", "終了記号は `」` です。"),
+        ("# 「見出し", "引用の終わり。」"),
+        ("[「案内](https://example.test)", "引用の終わり。」"),
+        (
+            "![「案内](https://example.test/image.png)",
+            "引用の終わり。」",
+        ),
+        ("```text\n「コード\n```", "引用の終わり。」"),
+    ] {
+        let text = format!("{start}\n本文を確認します🙂\n{end}");
+        let request = json!({"text":text,"context":{"channel":"official"}});
+        assert!(
+            godd_unslop::rewrite::needs_context(&request).is_none(),
+            "{start}"
+        );
+        assert!(
+            finish(
+                &request,
+                &text.replace("本文を確認します🙂", "本文を確かめます。")
+            )
+            .is_ok(),
+            "{start}"
+        );
+    }
+}
+
+#[test]
+fn nested_and_formatted_wrapped_quotes_remain_protected() {
+    for quote in [
+        "「**確認**しました。\n次に進みます。」",
+        "「『確認しました。』\n次に進みます。」",
+        "「`確認`しました。\n次に進みます。」",
+        "「確認しました。  \n次に進みます。」",
+        "「確認しました。\\\n次に進みます。」",
+    ] {
+        let text = format!("\u{feff}{quote}説明を実施します。");
+        let request = json!({"text":text});
+        assert!(
+            finish(
+                &request,
+                &text.replace("説明を実施します。", "説明します。")
+            )
+            .is_ok()
+        );
+        assert!(
+            finish(&request, &text.replace("次に", "先に")).is_err(),
+            "{quote}"
+        );
+    }
+}
+
+#[test]
 fn prompt_reuses_skill_layout_guidance_without_universal_rules() {
     let prompt = prepare(&json!({"text":"確認しました。次に進みます。"})).unwrap();
     let guidance = godd_unslop::skill::layout_guidance();

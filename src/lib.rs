@@ -82,11 +82,114 @@ fn numeric_re() -> &'static regex::Regex {
         regex::Regex::new(r"[+-]?[0-9０-９一二三四五六七八九十百千万億兆〇零]+(?:[.,．][0-9０-９]+)*(?:時間|秒|分|日|年|月|円|回|件|人|個|匹|本|枚|台|%|％)*(?:以上|以下|未満|超)?").expect("constant numeric pattern")
     })
 }
-fn quote_re() -> &'static regex::Regex {
-    static RE: OnceLock<regex::Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        regex::Regex::new("「[^」\\r\\n]*」|『[^』\\r\\n]*』").expect("constant quote pattern")
-    })
+fn quote_ranges(text: &str, prose: &[Range<usize>]) -> Vec<Range<usize>> {
+    quote_ranges_with_ascii(text, prose, false)
+}
+fn quote_ranges_with_ascii(
+    text: &str,
+    prose: &[Range<usize>],
+    include_ascii: bool,
+) -> Vec<Range<usize>> {
+    let prefix = usize::from(text.starts_with('\u{feff}')) * '\u{feff}'.len_utf8();
+    let mut open = Vec::new();
+    let mut open_counts = [0usize; 4];
+    let urls: Vec<_> = if include_ascii {
+        url_re().find_iter(text).map(|m| m.range()).collect()
+    } else {
+        Vec::new()
+    };
+    let mut quotes: Vec<Range<usize>> = Vec::new();
+    for (event, range) in parser(text).into_offset_iter() {
+        let range = range.start + prefix..range.end + prefix;
+        match event {
+            Event::Start(
+                Tag::Paragraph
+                | Tag::Item
+                | Tag::Heading { .. }
+                | Tag::CodeBlock(_)
+                | Tag::BlockQuote(_)
+                | Tag::MetadataBlock(_)
+                | Tag::HtmlBlock,
+            )
+            | Event::End(
+                TagEnd::Paragraph
+                | TagEnd::Item
+                | TagEnd::Heading(_)
+                | TagEnd::CodeBlock
+                | TagEnd::BlockQuote(_)
+                | TagEnd::MetadataBlock(_)
+                | TagEnd::HtmlBlock,
+            ) => {
+                open.clear();
+                open_counts.fill(0);
+            }
+            // CommonMark does not treat every Unicode whitespace-only line
+            // as a paragraph boundary; keep the same blank-line rule here.
+            Event::SoftBreak | Event::HardBreak
+                if text[range.end..]
+                    .split(['\r', '\n'])
+                    .next()
+                    .is_some_and(|s| s.trim().is_empty()) =>
+            {
+                open.clear();
+                open_counts.fill(0);
+            }
+            Event::Text(_) => {
+                let index = prose.partition_point(|p| p.end <= range.start);
+                if !prose.get(index).is_some_and(|p| p == &range) {
+                    continue;
+                }
+                // Only prose delimiters form quotes. Inline code, links and
+                // headings may contain bracket examples without opening one.
+                for (offset, c) in text[range.clone()].char_indices() {
+                    let at = range.start + offset;
+                    let url_index = urls.partition_point(|u| u.end <= at);
+                    if urls.get(url_index).is_some_and(|u| u.contains(&at)) {
+                        continue;
+                    }
+                    if c == '\''
+                        && text[..at]
+                            .chars()
+                            .next_back()
+                            .is_some_and(char::is_alphanumeric)
+                        && text[at + 1..]
+                            .chars()
+                            .next()
+                            .is_some_and(char::is_alphanumeric)
+                    {
+                        continue;
+                    }
+                    let (kind, opening) = match c {
+                        '「' => (0, true),
+                        '『' => (1, true),
+                        '」' => (0, false),
+                        '』' => (1, false),
+                        '"' if include_ascii => (2, open_counts[2] == 0),
+                        '\'' if include_ascii => (3, open_counts[3] == 0),
+                        _ => continue,
+                    };
+                    if opening {
+                        open.push((kind, at));
+                        open_counts[kind] += 1;
+                    } else if open_counts[kind] != 0 {
+                        // Recover the matching outer quote after an unclosed inner one.
+                        // Counts avoid rescanning the stack for repeated unmatched closers.
+                        let index = open.iter().rposition(|(k, _)| *k == kind).unwrap();
+                        let start = open[index].1;
+                        for (discarded, _) in open.drain(index..) {
+                            open_counts[discarded] -= 1;
+                        }
+                        while quotes.last().is_some_and(|q| q.start >= start) {
+                            quotes.pop();
+                        }
+                        quotes.push(start..at + c.len_utf8());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    quotes
 }
 fn parser(text: &str) -> Parser<'_> {
     Parser::new_ext(
@@ -206,11 +309,8 @@ fn editable_ranges(ranges: Vec<Range<usize>>, protected: &mut [Range<usize>]) ->
 pub fn analyze(text: &str) -> Result<Analysis, Error> {
     check(text)?;
     let (prose, headings, lists, strong_spans) = prose_ranges(text);
-    let mut quotes: Vec<_> = quote_re()
-        .find_iter(text)
-        .chain(url_re().find_iter(text))
-        .map(|m| m.range())
-        .collect();
+    let mut quotes = quote_ranges(text, &prose);
+    quotes.extend(url_re().find_iter(text).map(|m| m.range()));
     let prose = editable_ranges(prose, &mut quotes);
     let mut findings = Vec::new();
     let mut limited = false;

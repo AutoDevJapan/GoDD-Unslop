@@ -1,6 +1,53 @@
 use godd_unslop::style::{learn, review};
 use serde_json::json;
 #[test]
+fn review_unclosed_quotes_do_not_hide_corrections_after_block_boundaries() {
+    let p = learn(&json!({"examples":[{"before":"甲、乙。","after":"甲。乙。"}]})).unwrap();
+    for (open, close) in [('「', '」'), ('『', '』'), ('"', '"'), ('\'', '\'')] {
+        for separator in [
+            "\n\n",
+            "\r\n\t\r\n",
+            "\n\u{3000}\n",
+            "\r\u{3000}\r",
+            "\n\n# 見出し\n\n",
+        ] {
+            let text = format!("{open}途中{separator}甲、乙。{close}");
+            let r = review(&json!({"text":text,"profile":p["profile"]})).unwrap();
+            assert_eq!(r["findings"].as_array().unwrap().len(), 1, "{text:?}");
+        }
+    }
+}
+
+#[test]
+fn review_nested_quotes_and_markdown_brackets_use_the_same_boundaries() {
+    let p = learn(&json!({"examples":[{"before":"甲、乙。","after":"甲。乙。"}]})).unwrap();
+    for text in [
+        "「外『甲、乙。』外」",
+        "「甲、乙。『未閉じ」",
+        "\"甲、乙。\"",
+        "'甲、乙。'",
+    ] {
+        assert_eq!(
+            review(&json!({"text":text,"profile":p["profile"]})).unwrap()["findings"],
+            json!([]),
+            "{text}"
+        );
+    }
+    for text in [
+        "`「`\n甲、乙。\n`」`",
+        "[「案内](https://example.test)\n甲、乙。\n終わり。」",
+    ] {
+        let r = review(&json!({"text":text,"profile":p["profile"]})).unwrap();
+        assert_eq!(r["findings"].as_array().unwrap().len(), 1, "{text}");
+    }
+    let p = learn(&json!({"examples":[{"before":"甲。乙。","after":"甲。\n乙。"}]})).unwrap();
+    let text = "\u{feff}「外『甲。乙。』外」\r\n\r\n甲。乙。";
+    let r = review(&json!({"text":text,"profile":p["profile"]})).unwrap();
+    assert_eq!(r["findings"].as_array().unwrap().len(), 1);
+    assert_eq!(r["findings"][0]["start"]["byte"], text.rfind("乙").unwrap());
+}
+
+#[test]
 fn spacing_and_byte_locations() {
     let p=learn(&json!({"examples":[{"before":"甲。乙。","after":"甲。\n乙。"},{"before":"甲。\r\n乙。","after":"甲。\r\n\r\n乙。"}]})).unwrap()["profile"].clone();
     let r = review(&json!({"text":"前。\n\n甲。\r\n乙。","profile":p})).unwrap();
