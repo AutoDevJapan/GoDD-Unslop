@@ -91,6 +91,7 @@ fn rewrite_with_fixture(
         .arg("rewrite")
         .env("GODD_UNSLOP_CODEX", fixture)
         .env("UNSLOP_TEST_WARNING_MODE", mode)
+        .env("RUST_LOG", "off")
         .env(
             "UNSLOP_TEST_CONTRACT_FAILURE",
             root.join("missing-contract"),
@@ -136,6 +137,8 @@ fn rewrite_cli_surfaces_only_known_runtime_warnings_without_changing_legacy_outp
         ("none", vec![]),
         ("unknown", vec![]),
         ("text", vec![]),
+        ("spanned-stderr", vec!["project_instructions_truncated"]),
+        ("filtered-stderr", vec!["project_instructions_truncated"]),
     ] {
         let output = rewrite_with_fixture(&fixture, &root, mode);
         assert!(

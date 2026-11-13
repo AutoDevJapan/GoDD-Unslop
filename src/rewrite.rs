@@ -459,6 +459,14 @@ fn capture(
         .stdin(fs::File::open(work.0.join("input")).map_err(|_| Error("入力を開けません。"))?)
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(err));
+    if args.first() == Some(&"exec") {
+        // Keep the known instruction warning observable even when the parent
+        // uses Codex's default error-only filter. This changes only the child.
+        cmd.env(
+            "RUST_LOG",
+            "error,opentelemetry_sdk=off,opentelemetry_otlp=off,codex_core::agents_md=warn",
+        );
+    }
     for key in [
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -583,6 +591,15 @@ fn diagnostic<'a>(line: &'a str, level: &str, module: &str) -> Option<&'a str> {
             .strip_prefix(' ')?
             .trim_start()
     };
+    let rest = if let Some(span) = rest.strip_prefix("agents_md.load{max_total=") {
+        let (limit, rest) = span.split_once("}:")?;
+        if limit.is_empty() || !limit.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        rest.trim_start()
+    } else {
+        rest
+    };
     rest.strip_prefix(module)?.strip_prefix(": ")
 }
 
@@ -660,6 +677,8 @@ pub(crate) fn run_cancelled(input: &Value, cancel: Cancellation) -> Result<Value
             "--sandbox",
             "read-only",
             "--json",
+            "--color",
+            "never",
             "--model",
             "gpt-6.1-sol",
             "-c",
@@ -992,5 +1011,6 @@ mod process_tests {
         assert!(!skills_budget_warning(
             "Exceeded skills context budget. All skill descriptions were removed and secret additional skills were not included in the model-visible skills list."
         ));
+        assert!(runtime_warnings("", b"WARN arbitrary{max_total=32768}: codex_core::agents_md: project doc exceeds remaining budget; truncating path=synthetic\nWARN agents_md.load{max_total=secret}: codex_core::agents_md: project doc exceeds remaining budget; truncating path=synthetic\n").is_empty());
     }
 }
