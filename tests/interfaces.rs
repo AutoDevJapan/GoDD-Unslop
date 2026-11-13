@@ -19,6 +19,29 @@ fn cli(args: &[&str], text: &[u8]) -> std::process::Output {
 
 #[test]
 fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
+    let (root, fixture) = codex_fixture();
+    let _cleanup = Cleanup(root.clone());
+    let result = rewrite_with_fixture(&fixture, &root, "none");
+    assert!(
+        result.status.success(),
+        "contract field: {}; {}",
+        std::fs::read_to_string(root.join("missing-contract"))
+            .unwrap_or_else(|_| "none reported".into()),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let result: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(result["status"], "rewritten");
+    assert_eq!(result["rewritten_text"], "保存しました。");
+}
+
+struct Cleanup(std::path::PathBuf);
+impl Drop for Cleanup {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn codex_fixture() -> (std::path::PathBuf, std::path::PathBuf) {
     let root = std::env::temp_dir().join(format!(
         "unslop-model-contract-{}-{}",
         std::process::id(),
@@ -28,13 +51,6 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
             .as_nanos()
     ));
     std::fs::create_dir(&root).unwrap();
-    struct Cleanup(std::path::PathBuf);
-    impl Drop for Cleanup {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-    let _cleanup = Cleanup(root.clone());
     let fixture = root.join(if cfg!(windows) {
         "codex-contract.exe"
     } else {
@@ -63,9 +79,18 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
         "{}",
         String::from_utf8_lossy(&compiled.stderr)
     );
+    (root, fixture)
+}
+
+fn rewrite_with_fixture(
+    fixture: &std::path::Path,
+    root: &std::path::Path,
+    mode: &str,
+) -> std::process::Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_godd-unslop"))
         .arg("rewrite")
         .env("GODD_UNSLOP_CODEX", fixture)
+        .env("UNSLOP_TEST_WARNING_MODE", mode)
         .env(
             "UNSLOP_TEST_CONTRACT_FAILURE",
             root.join("missing-contract"),
@@ -81,17 +106,168 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
         .unwrap()
         .write_all(br#"{"text":"\u4fdd\u5b58\u3057\u307e\u3057\u305f\u3002"}"#)
         .unwrap();
-    let result = child.wait_with_output().unwrap();
+    child.wait_with_output().unwrap()
+}
+
+#[test]
+fn rewrite_cli_surfaces_only_known_runtime_warnings_without_changing_legacy_output() {
+    let (root, fixture) = codex_fixture();
+    let _cleanup = Cleanup(root.clone());
+    #[derive(serde::Deserialize)]
+    struct LegacyResult {
+        status: String,
+        rewritten_text: String,
+        comparison: Value,
+    }
+    for (mode, ids) in [
+        ("json", vec!["skills_context_budget"]),
+        (
+            "stderr",
+            vec!["skills_scan_limit", "project_instructions_truncated"],
+        ),
+        (
+            "mixed",
+            vec![
+                "skills_context_budget",
+                "skills_scan_limit",
+                "project_instructions_truncated",
+            ],
+        ),
+        ("none", vec![]),
+        ("unknown", vec![]),
+        ("text", vec![]),
+    ] {
+        let output = rewrite_with_fixture(&fixture, &root, mode);
+        assert!(
+            output.status.success(),
+            "{mode}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+        let warnings = result["runtime_warnings"]
+            .as_array()
+            .expect("runtime_warnings must reach the CLI result");
+        assert_eq!(
+            warnings
+                .iter()
+                .map(|v| v["id"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            ids,
+            "{mode}"
+        );
+        for warning in warnings {
+            assert_eq!(warning.as_object().unwrap().len(), 2);
+            assert!(warning["message"].as_str().unwrap().contains('。'));
+        }
+        assert!(
+            !result["runtime_warnings"]
+                .to_string()
+                .contains("synthetic-secret")
+        );
+        assert!(!result["runtime_warnings"].to_string().contains("file:///"));
+        let legacy: LegacyResult = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(legacy.status, "rewritten");
+        assert!(legacy.rewritten_text.starts_with("保存しました。"));
+        assert!(legacy.comparison.is_object());
+    }
+    for mode in ["fail", "empty"] {
+        let output = rewrite_with_fixture(&fixture, &root, mode);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("Exceeded skills"));
+    }
+}
+
+#[test]
+fn rewrite_runtime_warnings_reach_mcp_and_recipient_cli() {
+    let (root, fixture) = codex_fixture();
+    let _cleanup = Cleanup(root.clone());
+    let db = root.join("synthetic-relationships.sqlite3");
+    let relationship = serde_json::from_value(json!({
+        "id":"synthetic-peer", "label":"架空の同僚", "confirmed":true,
+        "source":"テスト用の設定", "context":{"channel":"chat"}
+    }))
+    .unwrap();
+    godd_unslop::relationships::Store::open(&db, true)
+        .unwrap()
+        .put(&relationship)
+        .unwrap();
+    let mut recipient = Command::new(env!("CARGO_BIN_EXE_godd-unslop"))
+        .args(["rewrite-for", "synthetic-peer"])
+        .env("GODD_UNSLOP_DB", &db)
+        .env("GODD_UNSLOP_CODEX", &fixture)
+        .env("UNSLOP_TEST_WARNING_MODE", "mixed")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    recipient
+        .stdin
+        .take()
+        .unwrap()
+        .write_all("{\"text\":\"保存しました。\"}".as_bytes())
+        .unwrap();
+    let output = recipient.wait_with_output().unwrap();
     assert!(
-        result.status.success(),
-        "contract field: {}; {}",
-        std::fs::read_to_string(root.join("missing-contract"))
-            .unwrap_or_else(|_| "none reported".into()),
-        String::from_utf8_lossy(&result.stderr)
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
-    let result: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(result["status"], "rewritten");
-    assert_eq!(result["rewritten_text"], "保存しました。");
+    let recipient_value: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        recipient_value["runtime_warnings"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(recipient_value["rewritten_text"], "保存しました。");
+
+    let mut server = Command::new(env!("CARGO_BIN_EXE_godd-unslop"))
+        .arg("serve")
+        .env("GODD_UNSLOP_CODEX", &fixture)
+        .env("UNSLOP_TEST_WARNING_MODE", "mixed")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut input = server.stdin.take().unwrap();
+    let mut output = BufReader::new(server.stdout.take().unwrap());
+    let send = |input: &mut std::process::ChildStdin, v: Value| {
+        writeln!(input, "{v}").unwrap();
+        input.flush().unwrap();
+    };
+    let receive = |output: &mut BufReader<std::process::ChildStdout>| {
+        let mut line = String::new();
+        assert!(output.read_line(&mut line).unwrap() > 0);
+        serde_json::from_str::<Value>(&line).unwrap()
+    };
+    send(
+        &mut input,
+        json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"synthetic-runtime-warning-test","version":"1"}}}),
+    );
+    assert!(receive(&mut output)["result"]["capabilities"].is_object());
+    send(
+        &mut input,
+        json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
+    );
+    send(
+        &mut input,
+        json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"unslop_rewrite","arguments":{"text":"保存しました。"}}}),
+    );
+    let response = receive(&mut output);
+    assert_ne!(response["result"]["isError"], true, "{response}");
+    let mcp_value: Value =
+        serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        mcp_value["runtime_warnings"],
+        recipient_value["runtime_warnings"]
+    );
+    assert_eq!(mcp_value["rewritten_text"], "保存しました。");
+    drop(input);
+    assert!(server.wait().unwrap().success());
 }
 
 #[test]
