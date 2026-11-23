@@ -328,10 +328,7 @@ fn cli_reports_version_before_stdin_eof() {
             vec![std::ffi::OsString::from("--version"), "serve".into()],
             false,
         ),
-        (
-            vec![std::ffi::OsString::from("-V"), "--json".into()],
-            false,
-        ),
+        (vec![std::ffi::OsString::from("-V"), "--json".into()], false),
     ];
     for flag in ["--version", "-V"] {
         #[cfg(unix)]
@@ -386,9 +383,7 @@ fn cli_reports_version_before_stdin_eof() {
                 drop(process.stdin.take());
                 let collected = process.child.wait();
                 process.reaped = collected.is_ok();
-                panic!(
-                    "{flag}: version waited for stdin EOF; kill={killed:?}; wait={collected:?}"
-                );
+                panic!("{flag}: version waited for stdin EOF; kill={killed:?}; wait={collected:?}");
             }
             if let Some(status) = process.child.try_wait().unwrap() {
                 process.reaped = true;
@@ -554,8 +549,7 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
             assert_eq!(result["numeric_fragments_original"], json!(["3回"]));
             assert_eq!(result["numeric_fragments_rewrite"], json!(["5回"]));
             assert_eq!(result["semantic_equality"], "not_established");
-            let request =
-                json!({"action":"compare","original":"3回です。","rewrite":"5回です。"});
+            let request = json!({"action":"compare","original":"3回です。","rewrite":"5回です。"});
             let output = cli(&["dispatch"], request.to_string().as_bytes());
             assert_eq!(output.status.code(), Some(0));
             assert!(output.stderr.is_empty());
