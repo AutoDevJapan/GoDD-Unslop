@@ -1,7 +1,7 @@
 #![cfg(feature = "mcp")]
 use serde_json::{Value, json};
 use std::{
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader, Read, Write},
     process::{Command, Stdio},
 };
 
@@ -242,16 +242,18 @@ fn rewrite_runtime_warnings_reach_mcp_and_recipient_cli() {
         writeln!(input, "{v}").unwrap();
         input.flush().unwrap();
     };
-    let receive = |output: &mut BufReader<std::process::ChildStdout>| {
+    let receive = |output: &mut BufReader<std::process::ChildStdout>, expected_id: u64| {
         let mut line = String::new();
         assert!(output.read_line(&mut line).unwrap() > 0);
-        serde_json::from_str::<Value>(&line).unwrap()
+        let response = serde_json::from_str::<Value>(&line).unwrap();
+        assert_eq!(response["id"], expected_id);
+        response
     };
     send(
         &mut input,
         json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"synthetic-runtime-warning-test","version":"1"}}}),
     );
-    assert!(receive(&mut output)["result"]["capabilities"].is_object());
+    assert!(receive(&mut output, 1)["result"]["capabilities"].is_object());
     send(
         &mut input,
         json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
@@ -260,7 +262,7 @@ fn rewrite_runtime_warnings_reach_mcp_and_recipient_cli() {
         &mut input,
         json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"unslop_rewrite","arguments":{"text":"保存しました。"}}}),
     );
-    let response = receive(&mut output);
+    let response = receive(&mut output, 2);
     assert_ne!(response["result"]["isError"], true, "{response}");
     let mcp_value: Value =
         serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap()).unwrap();
@@ -271,6 +273,177 @@ fn rewrite_runtime_warnings_reach_mcp_and_recipient_cli() {
     assert_eq!(mcp_value["rewritten_text"], "保存しました。");
     drop(input);
     assert!(server.wait().unwrap().success());
+}
+
+#[test]
+fn cli_reports_its_package_version_with_empty_stdin() {
+    for flag in ["--version", "-V"] {
+        let output = cli(&[flag], &[]);
+        assert_eq!(output.status.code(), Some(0));
+        assert!(output.stderr.is_empty());
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            concat!("godd-unslop ", env!("CARGO_PKG_VERSION"), "\n")
+        );
+    }
+    for args in [["--version", "serve"], ["-V", "--json"]] {
+        let output = cli(&args, &[]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        assert!(!output.stderr.is_empty());
+    }
+}
+
+#[test]
+fn cli_reports_version_before_stdin_eof() {
+    struct VersionProcess {
+        child: std::process::Child,
+        stdin: Option<std::process::ChildStdin>,
+        reaped: bool,
+    }
+    impl Drop for VersionProcess {
+        fn drop(&mut self) {
+            if !self.reaped {
+                drop(self.stdin.take());
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+            }
+        }
+    }
+
+    let root = std::env::temp_dir().join(format!(
+        "unslop-version-open-stdin-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&root).unwrap();
+    let _cleanup = Cleanup(root.clone());
+    let mut cases = vec![
+        (vec![std::ffi::OsString::from("--version")], true),
+        (vec![std::ffi::OsString::from("-V")], true),
+        (
+            vec![std::ffi::OsString::from("--version"), "serve".into()],
+            false,
+        ),
+        (
+            vec![std::ffi::OsString::from("-V"), "--json".into()],
+            false,
+        ),
+    ];
+    for flag in ["--version", "-V"] {
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            cases.push((
+                vec![flag.into(), std::ffi::OsString::from_vec(vec![0xff])],
+                false,
+            ));
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::ffi::OsStringExt;
+            cases.push((
+                vec![flag.into(), std::ffi::OsString::from_wide(&[0xd800])],
+                false,
+            ));
+        }
+    }
+    for (index, (args, version_expected)) in cases.into_iter().enumerate() {
+        let flag = format!("{args:?}");
+        let stdout_path = root.join(format!("stdout-{index}"));
+        let stderr_path = root.join(format!("stderr-{index}"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_godd-unslop"));
+        command
+            .args(&args)
+            .env("TOKIO_WORKER_THREADS", "0")
+            .stdin(Stdio::piped())
+            .stdout(std::fs::File::create_new(&stdout_path).unwrap())
+            .stderr(std::fs::File::create_new(&stderr_path).unwrap());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x08000000);
+        }
+        let mut process = VersionProcess {
+            child: command.spawn().unwrap(),
+            stdin: None,
+            reaped: false,
+        };
+        process.stdin = process.child.stdin.take();
+        assert!(process.stdin.is_some());
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let status = loop {
+            assert!(
+                std::fs::metadata(&stdout_path).unwrap().len() <= 65_536
+                    && std::fs::metadata(&stderr_path).unwrap().len() <= 65_536,
+                "{flag}: version output exceeded its limit"
+            );
+            if std::time::Instant::now() >= deadline {
+                let killed = process.child.kill();
+                drop(process.stdin.take());
+                let collected = process.child.wait();
+                process.reaped = collected.is_ok();
+                panic!(
+                    "{flag}: version waited for stdin EOF; kill={killed:?}; wait={collected:?}"
+                );
+            }
+            if let Some(status) = process.child.try_wait().unwrap() {
+                process.reaped = true;
+                break status;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        // Keep the owned write end open until exit and both output checks finish.
+        assert!(process.stdin.is_some());
+        let mut stdout = Vec::new();
+        std::fs::File::open(&stdout_path)
+            .unwrap()
+            .take(65_537)
+            .read_to_end(&mut stdout)
+            .unwrap();
+        let mut stderr = Vec::new();
+        std::fs::File::open(&stderr_path)
+            .unwrap()
+            .take(65_537)
+            .read_to_end(&mut stderr)
+            .unwrap();
+        assert!(stdout.len() <= 65_536 && stderr.len() <= 65_536);
+        if version_expected {
+            assert_eq!(status.code(), Some(0));
+            assert!(stderr.is_empty());
+            assert_eq!(
+                String::from_utf8(stdout).unwrap(),
+                concat!("godd-unslop ", env!("CARGO_PKG_VERSION"), "\n")
+            );
+        } else {
+            assert_eq!(status.code(), Some(2));
+            assert!(stdout.is_empty());
+            assert!(!stderr.is_empty());
+        }
+    }
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn cli_dispatch_compare_preserves_json_output_and_failure_exit() {
+    let request = json!({"action":"compare","original":"3回です。","rewrite":"5回です。"});
+    let output = cli(&["dispatch", "--strict"], request.to_string().as_bytes());
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let result: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["changed"], true);
+    assert_eq!(result["numeric_fragments_changed"], true);
+    assert_eq!(result["numeric_fragments_original"], json!(["3回"]));
+    assert_eq!(result["numeric_fragments_rewrite"], json!(["5回"]));
+    assert_eq!(result["semantic_equality"], "not_established");
+    let invalid = json!({"action":"compare","original":3,"rewrite":"5回です。"});
+    let output = cli(&["dispatch"], invalid.to_string().as_bytes());
+    assert_eq!(output.status.code(), Some(2));
+    assert!(output.stdout.is_empty());
+    assert!(!output.stderr.is_empty());
 }
 
 #[test]
@@ -315,16 +488,18 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
         writeln!(input, "{v}").unwrap();
         input.flush().unwrap();
     };
-    let receive = |output: &mut BufReader<std::process::ChildStdout>| {
+    let receive = |output: &mut BufReader<std::process::ChildStdout>, expected_id: u64| {
         let mut line = String::new();
         assert!(output.read_line(&mut line).unwrap() > 0);
-        serde_json::from_str::<Value>(&line).unwrap()
+        let response = serde_json::from_str::<Value>(&line).unwrap();
+        assert_eq!(response["id"], expected_id);
+        response
     };
     send(
         &mut input,
         json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"integration-test","version":"1"}}}),
     );
-    assert!(receive(&mut output)["result"]["capabilities"]["tools"].is_object());
+    assert!(receive(&mut output, 1)["result"]["capabilities"]["tools"].is_object());
     send(
         &mut input,
         json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
@@ -334,13 +509,13 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
         json!({"jsonrpc":"2.0","id":2,"method":"tools/list"}),
     );
     assert_eq!(
-        receive(&mut output)["result"]["tools"]
+        receive(&mut output, 2)["result"]["tools"]
             .as_array()
             .unwrap()
             .len(),
         7
     );
-    for (name, arguments) in [
+    for (index, (name, arguments)) in [
         ("unslop_analyze", json!({"text":"既定です。"})),
         (
             "unslop_compare",
@@ -359,30 +534,45 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
             "unslop_style_review",
             json!({"text":"保存。確認。","profile":{"version":1,"rules":[]}}),
         ),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let request_id = 3 + index as u64;
         send(
             &mut input,
-            json!({"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":name,"arguments":arguments}}),
+            json!({"jsonrpc":"2.0","id":request_id,"method":"tools/call","params":{"name":name,"arguments":arguments}}),
         );
-        let response = receive(&mut output);
+        let response = receive(&mut output, request_id);
         assert_ne!(response["result"]["isError"], true, "{response}");
-        assert!(
-            serde_json::from_str::<Value>(
-                response["result"]["content"][0]["text"].as_str().unwrap()
-            )
-            .is_ok()
-        );
+        let result: Value =
+            serde_json::from_str(response["result"]["content"][0]["text"].as_str().unwrap())
+                .unwrap();
+        if name == "unslop_compare" {
+            assert_eq!(result["changed"], true);
+            assert_eq!(result["numeric_fragments_changed"], true);
+            assert_eq!(result["numeric_fragments_original"], json!(["3回"]));
+            assert_eq!(result["numeric_fragments_rewrite"], json!(["5回"]));
+            assert_eq!(result["semantic_equality"], "not_established");
+            let request =
+                json!({"action":"compare","original":"3回です。","rewrite":"5回です。"});
+            let output = cli(&["dispatch"], request.to_string().as_bytes());
+            assert_eq!(output.status.code(), Some(0));
+            assert!(output.stderr.is_empty());
+            let standalone: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(result, standalone);
+        }
     }
     send(
         &mut input,
-        json!({"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"unslop_analyze","arguments":{"text":5}}}),
+        json!({"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"unslop_analyze","arguments":{"text":5}}}),
     );
-    assert_eq!(receive(&mut output)["result"]["isError"], true);
+    assert_eq!(receive(&mut output, 9)["result"]["isError"], true);
     send(
         &mut input,
-        json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"unknown","arguments":{}}}),
+        json!({"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"unknown","arguments":{}}}),
     );
-    assert!(receive(&mut output)["error"].is_object());
+    assert!(receive(&mut output, 10)["error"].is_object());
     drop(input);
     assert!(child.wait().unwrap().success());
 }
