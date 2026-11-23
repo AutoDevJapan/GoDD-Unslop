@@ -455,6 +455,9 @@ Codexの`env`はサーバーへ渡す値の指定です。代わりに同じ`[mc
 
 MCPサーバーと同じOSユーザー・ホーム・`CODEX_HOME`の条件で、登録した同じCodexの`login status`が`Logged in using ChatGPT`を返すことを起動側で確認してください。独自の`CODEX_HOME`などログイン先の選択に必要な環境変数がある場合は、同じ値を当該サーバーの`--env`／`env`（Codexでは`env_vars`も可）へ明示し、APIキーや認証ファイルの内容を設定へ転記しないでください。変更後はホストの手順でMCPサーバーを再起動し、`/mcp`で接続を確認します。実装も改稿ごとに同じCodexでログインを確認し、不成立なら改稿へ進みません。ここでの設定保存・事前確認は、実際の改稿や両ホストでの受入成功を意味しません。
 
+認証の事前確認と実改稿では、読む設定が異なります。`login status`は通常のユーザー設定を使いますが、改稿の`exec`には`--ignore-user-config`を付けます。ユーザー設定の`cli_auth_credentials_store`だけで`keyring`または`auto`を選び、資格情報がOSの資格情報ストアにだけある場合、ほかに有効な設定がなければ改稿側は既定のファイル保存先を使い、同じ実行ファイル・`CODEX_HOME`でも改稿できない可能性があります。
+このため、`login status`の成功は改稿時の認証・利用資格を保証しません。同じMCPサーバー環境から代表的な`unslop_rewrite`を実行し、改稿本文と結果を確認して初めて改稿を受け入れます。未確認なら改稿は未受入です。資格情報のコピー・移行や保存方式・権限・グローバル設定の変更を求める手順ではありません。[Codexの資格情報保存](https://learn.chatgpt.com/docs/auth#credential-storage)も参照してください。
+
 設定の詳細は[Codexのstdio環境設定](https://learn.chatgpt.com/docs/extend/mcp?surface=cli#stdio-servers)と[Claude Codeのstdio登録](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server)を参照してください。
 
 MCPの引数には`action`を含めず、表にある項目だけを渡してください。
