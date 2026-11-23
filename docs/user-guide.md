@@ -422,6 +422,41 @@ Claude Codeのこの例は、既定のlocal scopeで現在のプロジェクト�
 
 `unslop_rewrite`は、MCPサーバーを起動する環境のCodex実行ファイルとChatGPTログインを使います。MCPを使う側がClaude Codeでも、この改稿処理はClaudeのログインへ切り替わりません。ホスト側のログインやMCPの接続成功だけでは改稿の認証確認になりません。設定と利用枠は[Codex CLIで文章を書き直す](#codex-cliで文章を書き直す)を参照してください。Skillだけの利用と異なり、別途AIを呼び出します。
 
+改稿で非既定パスのCodexを使う場合は、前の登録例に次の`--env`を追加します。以下はローカルstdio用の代替例で、既に同名サーバーがある場合は現在の登録を確認してから更新してください。親シェルへ`GODD_UNSLOP_CODEX`を設定しただけでは、CodexのMCP子プロセスへ渡るとは限りません。
+
+```powershell
+# Windows / PowerShell。パスは実際の配置へ置き換えます。
+$codexExe = 'C:/Tools/Codex/codex.exe'
+& $codexExe login status
+codex mcp add godd-unslop --env "GODD_UNSLOP_CODEX=$codexExe" -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+claude mcp add --env "GODD_UNSLOP_CODEX=$codexExe" --transport stdio godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+```
+
+```sh
+# macOS・Linux。パスは実際の配置へ置き換えます。
+codex_exe="$HOME/Tools/Codex/codex"
+"$codex_exe" login status
+codex mcp add godd-unslop --env "GODD_UNSLOP_CODEX=$codex_exe" -- "$HOME/.cargo/bin/godd-unslop" serve
+claude mcp add --env "GODD_UNSLOP_CODEX=$codex_exe" --transport stdio godd-unslop -- "$HOME/.cargo/bin/godd-unslop" serve
+```
+
+`--env`は`serve`の引数ではなく、各ホストが起動するMCPサーバーの環境へ値を設定するオプションです。`NAME=値`全体を一つの引数として引用し、パスの値そのものに引用符を入れません。Claude Codeの例では、複数値を取る`--env`がサーバー名を取り込まないよう、`--transport stdio`を間に置いています。
+
+Codexで設定ファイルを使う場合は、当該サーバーの`env`へ同じ値を指定できます。既存の同名テーブルを重複作成せず、その登録へ反映します。
+
+```toml
+[mcp_servers.godd-unslop]
+command = "C:/Tools/GoDD Unslop/godd-unslop.exe"
+args = ["serve"]
+env = { GODD_UNSLOP_CODEX = "C:/Tools/Codex/codex.exe" }
+```
+
+Codexの`env`はサーバーへ渡す値の指定です。代わりに同じ`[mcp_servers.godd-unslop]`直下で`env_vars = ["GODD_UNSLOP_CODEX"]`とすると、MCPを起動するCodex自身のローカル環境からその名前の値を転送します。その場合は、変数を設定した環境からCodexを起動してください。後から別シェルで設定しても起動済みホストの環境は変わりません。Claude Codeでは、当該サーバー定義の`env`オブジェクトへ`"GODD_UNSLOP_CODEX": "C:/Tools/Codex/codex.exe"`を指定します。Codexの`env_vars`をClaude Codeの設定へ流用しません。
+
+MCPサーバーと同じOSユーザー・ホーム・`CODEX_HOME`の条件で、登録した同じCodexの`login status`が`Logged in using ChatGPT`を返すことを起動側で確認してください。独自の`CODEX_HOME`などログイン先の選択に必要な環境変数がある場合は、同じ値を当該サーバーの`--env`／`env`（Codexでは`env_vars`も可）へ明示し、APIキーや認証ファイルの内容を設定へ転記しないでください。変更後はホストの手順でMCPサーバーを再起動し、`/mcp`で接続を確認します。実装も改稿ごとに同じCodexでログインを確認し、不成立なら改稿へ進みません。ここでの設定保存・事前確認は、実際の改稿や両ホストでの受入成功を意味しません。
+
+設定の詳細は[Codexのstdio環境設定](https://learn.chatgpt.com/docs/extend/mcp?surface=cli#stdio-servers)と[Claude Codeのstdio登録](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server)を参照してください。
+
 MCPの引数には`action`を含めず、表にある項目だけを渡してください。
 CLIの`dispatch`へJSONを渡す場合は、`action`に`rewrite`、`analyze`、`plan`、`compare`、`features`、`style_learn`、`style_review`のいずれかを指定します。
 
@@ -448,7 +483,7 @@ rewriteツールや別の生成処理は呼ばず、比較結果を返してく�
 
 実装上の期待値は、`changed: true`、`numeric_fragments_changed: true`、`numeric_fragments_original: ["3回"]`、`numeric_fragments_rewrite: ["5回"]`、`semantic_equality: "not_established"`です。意味の一致を保証する結果ではありません。MCPでは成功応答の`content`にあるtextブロックをJSONとして読み、`isError: true`ではないことも確認します。会話の説明だけでなく、実際のツール呼び出しと引数・返却結果が同じかを確認してください。
 
-CLI単体の比較との対照には、UTF-8で`compare-request.json`を作り、次の内容を保存します。
+CLI単体の比較との対照には、UTF-8（BOMなし）で`compare-request.json`を作り、次の内容を保存します。
 
 ```json
 {"action":"compare","original":"3回です。","rewrite":"5回です。"}
