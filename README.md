@@ -42,8 +42,8 @@ godd-unslop analyze article.txt
 
 `install-skill`には、利用するアプリが読み込むSkillのルートフォルダーを指定します。その下に`godd-unslop/SKILL.md`を保存します。
 [導入手順](docs/user-guide.md#aiに文章を書いてもらうためのskillを入れる)に、保存先と使い始め方を載せています。
-Codex CLIでは、依頼の先頭に`$godd-unslop`を付け、読者と必要な事実を伝えてください。
-たとえば、`codex`で起動した対話画面の入力欄へ、次の文章を貼り付けて送信します。
+Codex CLIでは`$godd-unslop`、Claude Codeでは`/godd-unslop`を依頼の先頭に付け、読者と必要な事実を伝えてください。両方で同じ配布Skill本文を使います。
+たとえば、`codex`で起動した対話画面の入力欄へ、次の文章を貼り付けて送信します。Claude Codeの対話画面では、先頭行を`/godd-unslop`に替えます。
 
 ```text
 $godd-unslop
@@ -140,7 +140,7 @@ godd-unslop compare article.txt revised.txt
 分析・比較と修正例の照合は生成モデルを呼び出しません。`rewrite`はCodex CLIを通じて原文をChatGPTへ送り、改稿を受け取ります。
 
 MCPを使う場合は、対応するアプリに`godd-unslop serve`を登録します。
-設定例と利用できる機能は[ユーザーガイドのMCP設定](docs/user-guide.md#mcpクライアントから使う)を参照してください。
+Codex CLIとClaude Codeそれぞれの登録・接続確認と、生成モデルを呼ばない`unslop_compare`の同入力の試し方は、[ユーザーガイドのMCP設定](docs/user-guide.md#mcpクライアントから使う)を参照してください。MCPを使うアプリのログインと、`unslop_rewrite`が使うCodexのChatGPTログインは別です。
 
 Rustから使う場合は、`analyze`、`plan`、`compare`、`features`、`style::learn`、`style::review`、`rewrite::run`を利用できます。
 MCPが不要なら、依存関係の指定に`default-features = false`を付けられます。

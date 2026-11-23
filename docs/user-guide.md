@@ -32,24 +32,33 @@ godd-unslop --help
 ## AIに文章を書いてもらうためのSkillを入れる
 
 最初の下書きから書き方を整えたい場合は、使っているAIアプリへSkillを導入します。
-アプリが読み込むSkillのルートフォルダーを確認し、次のように指定してください。アプリの設定ファイルや既存Skillは変更しません。
+アプリが読み込むSkillのルートフォルダーを確認し、次のように指定してください。`install-skill`はアプリの設定ファイルを変更しません。
 
-Codexでホーム配下のSkillsを使う場合の例です。別のアプリや配置へ合わせる場合は保存先を置き換えます。
+既に共有のSkill置き場を両方のアプリから読んでいる場合は、その共有先へ一度だけインストールします。既存のシンボリックリンクやジャンクションを実体のフォルダーで置き換えないでください。
+個別に配置する場合の例は次のとおりです。現在のCodexの個人用ルートは`~/.agents/skills`、Claude Codeは`~/.claude/skills`です。既存のCodexで`~/.codex/skills`などを読み込む運用がある場合は、使用中の一覧と配置を確かめ、同名Skillを重複して作らないようにします。
 
 ```powershell
-# Windows / PowerShell
-godd-unslop install-skill (Join-Path $HOME '.codex/skills')
+# Windows / PowerShell。共有先がない場合の個別配置
+godd-unslop install-skill (Join-Path $HOME '.agents/skills') # Codex
+godd-unslop install-skill (Join-Path $HOME '.claude/skills') # Claude Code
 ```
 
 ```sh
-# macOS・Linuxでホーム配下を使う場合
-godd-unslop install-skill "$HOME/.codex/skills"
+# macOS・Linux。共有先がない場合の個別配置
+godd-unslop install-skill "$HOME/.agents/skills" # Codex
+godd-unslop install-skill "$HOME/.claude/skills" # Claude Code
 ```
 
-共有のSkill置き場を使っている環境では、ホーム配下へ新設せず、既存の共有先を指定してください。
 保存先の下に`godd-unslop/SKILL.md`が作られます。同じ内容があれば成功し、異なる既存ファイルがあれば上書きせずエラーを返します。
 更新時に内容が異なる場合は、自分の変更を別途保存してから内容を比較してください。再インストールだけで既存Skillが更新されるわけではありません。
 アプリのSkill一覧に表示されることを確認し、必要ならそのアプリの手順で再読み込みするか新しい会話を開きます。
+
+保存される本文は両アプリとも[同じ配布版](distribution/godd-unslop-SKILL.md)です。`install-skill`は接続設定や権限を追加するコマンドではありません。
+
+| アプリ | 対話画面で指定する名前 |
+| --- | --- |
+| Codex CLI | `$godd-unslop` |
+| Claude Code | `/godd-unslop` |
 
 Codex CLIでは、依頼の先頭に`$godd-unslop`を付けます。
 `codex`で起動した対話画面の入力欄へ、次の文章をまとめて貼り付けて送信します。
@@ -67,9 +76,9 @@ $godd-unslop
 Skill名を付けずに使う場合は、Codexが依頼とSkillの説明を照合して選ぶことがあります。
 一覧に表示されていても、すべての日本語の依頼で自動的に選ばれるとは限りません。
 使われたか分からないときは、上のように名前を指定してください。
-ほかのアプリでは、そのアプリのSkill選択・呼び出し方法を使います。
+Claude Codeでは`claude`で起動した対話画面に、上の例の先頭行だけを`/godd-unslop`に替えて入力します。`/`の一覧で名前を確認できます。これもシェルへ渡すコマンドではありません。ほかのアプリでは、そのアプリのSkill選択・呼び出し方法を使います。
 
-保存先にファイルがあること、アプリの一覧に出ること、本文を読んで使うことは、それぞれ別の確認です。
+保存先にファイルがあること、各アプリの一覧に出ること、本文を読んで使うこと、実際の業務結果が得られることは、それぞれ別の確認です。片方だけの確認を両アプリでの成功として扱わないでください。
 Codex CLIの実行履歴に`godd-unslop/SKILL.md`を読む操作があれば、本文を読み込んだ手がかりになります。
 文章の見た目だけで、Skillが使われたとは判断しないでください。
 PowerPoint版の「godd-unslopのSkillを使って」と頼む例は、文章で利用を伝える例です。Codex CLIで名前を指定するときは、上の`$godd-unslop`付きの入力例を使ってください。
@@ -346,8 +355,47 @@ godd-unslop features --catalog
 
 ## MCPクライアントから使う
 
-MCPクライアントに、`godd-unslop serve`を標準入出力で起動するサーバーとして登録します。
-`mcpServers`形式を使うクライアントなら、次の設定をそのクライアントの設定ファイルへ組み込めます。
+Codex CLIとClaude Codeは、同じ`godd-unslop serve`を標準入出力（stdio）で起動できます。Skillの導入とは別に、それぞれのMCP設定へ登録します。
+まず、導入したネイティブ実行ファイルの絶対パスを確かめます。次のパスは例なので、実際の配置へ置き換えてください。既に同名サーバーを登録している場合は、現在のコマンドと引数を確認してから変更します。
+
+### Codex CLIへ登録する
+
+```powershell
+# Windows / PowerShell
+codex mcp add godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+codex mcp list
+```
+
+```sh
+# macOS・Linux
+codex mcp add godd-unslop -- "$HOME/.cargo/bin/godd-unslop" serve
+codex mcp list
+```
+
+`codex`の対話画面で`/mcp`を開き、接続状態と公開されたツールを確認します。CodexはMCP設定を`config.toml`の`mcp_servers`で管理するため、下の汎用`mcpServers` JSONをそのまま貼り付ける形式ではありません。
+
+### Claude Codeへ登録する
+
+```powershell
+# Windows / PowerShell
+claude mcp add --transport stdio godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+claude mcp list
+```
+
+```sh
+# macOS・Linux
+claude mcp add --transport stdio godd-unslop -- "$HOME/.cargo/bin/godd-unslop" serve
+claude mcp list
+```
+
+Claude Codeのこの例は、既定のlocal scopeで現在のプロジェクトから使う登録です。チーム共有など別の範囲が必要な場合は、既存の設定と用途に合わせて公式手順のscopeを選びます。`claude`の対話画面では`/mcp`で接続状態とツールを確認します。
+
+両CLIとも`--`より後ろがサーバーのコマンドと引数です。空白を含む実行ファイルのパスは一つの引数として引用し、`serve`は別の引数にします。PowerShellの引用符をMCPの`command`値に埋め込んだり、`serve`をパスに連結したりしないでください。ネイティブの`godd-unslop.exe`を直接指定するので、Windowsの`.cmd`を起動するためのラッパーは不要です。
+登録コマンドの成功は設定の保存であり、接続や機能実行の成功とは別です。アプリが求める通常の信頼・ツール利用確認を行い、接続できない場合はパス・版・権限を調べます。
+
+### その他のMCPクライアント
+
+`mcpServers`形式を使うクライアントの設定例です。設定先や形式は、そのクライアントの説明に従ってください。GUIから起動するクライアントでPATHが引き継がれない場合は、`command`へ実行ファイルの絶対パスを指定します。
 
 ```json
 {
@@ -360,8 +408,7 @@ MCPクライアントに、`godd-unslop serve`を標準入出力で起動する�
 }
 ```
 
-設定ファイルの場所や形式はクライアントによって異なります。
-GUIから起動するクライアントでPATHが引き継がれない場合は、`command`へ実行ファイルの絶対パスを指定してください。
+### 利用できる7機能
 
 | ツール | 主な入力 | 返す内容 |
 | --- | --- | --- |
@@ -373,13 +420,86 @@ GUIから起動するクライアントでPATHが引き継がれない場合は�
 | `unslop_style_learn` | `examples`、任意の`profile` | 更新した設定と無視した例の件数。 |
 | `unslop_style_review` | `text`、`profile` | 配置・句読点の変更候補。 |
 
-`unslop_rewrite`はMCPサーバー側のCodexログインと実行ファイルを使います。Skillだけの利用と異なり、別途AIを呼び出します。
+`unslop_rewrite`は、MCPサーバーを起動する環境のCodex実行ファイルとChatGPTログインを使います。MCPを使う側がClaude Codeでも、この改稿処理はClaudeのログインへ切り替わりません。ホスト側のログインやMCPの接続成功だけでは改稿の認証確認になりません。設定と利用枠は[Codex CLIで文章を書き直す](#codex-cliで文章を書き直す)を参照してください。Skillだけの利用と異なり、別途AIを呼び出します。
+
+改稿で非既定パスのCodexを使う場合は、前の登録例に次の`--env`を追加します。以下はローカルstdio用の代替例で、既に同名サーバーがある場合は現在の登録を確認してから更新してください。親シェルへ`GODD_UNSLOP_CODEX`を設定しただけでは、CodexのMCP子プロセスへ渡るとは限りません。
+
+```powershell
+# Windows / PowerShell。パスは実際の配置へ置き換えます。
+$codexExe = 'C:/Tools/Codex/codex.exe'
+& $codexExe login status
+codex mcp add godd-unslop --env "GODD_UNSLOP_CODEX=$codexExe" -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+claude mcp add --env "GODD_UNSLOP_CODEX=$codexExe" --transport stdio godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+```
+
+```sh
+# macOS・Linux。パスは実際の配置へ置き換えます。
+codex_exe="$HOME/Tools/Codex/codex"
+"$codex_exe" login status
+codex mcp add godd-unslop --env "GODD_UNSLOP_CODEX=$codex_exe" -- "$HOME/.cargo/bin/godd-unslop" serve
+claude mcp add --env "GODD_UNSLOP_CODEX=$codex_exe" --transport stdio godd-unslop -- "$HOME/.cargo/bin/godd-unslop" serve
+```
+
+`--env`は`serve`の引数ではなく、各ホストが起動するMCPサーバーの環境へ値を設定するオプションです。`NAME=値`全体を一つの引数として引用し、パスの値そのものに引用符を入れません。Claude Codeの例では、複数値を取る`--env`がサーバー名を取り込まないよう、`--transport stdio`を間に置いています。
+
+Codexで設定ファイルを使う場合は、当該サーバーの`env`へ同じ値を指定できます。既存の同名テーブルを重複作成せず、その登録へ反映します。
+
+```toml
+[mcp_servers.godd-unslop]
+command = "C:/Tools/GoDD Unslop/godd-unslop.exe"
+args = ["serve"]
+env = { GODD_UNSLOP_CODEX = "C:/Tools/Codex/codex.exe" }
+```
+
+Codexの`env`はサーバーへ渡す値の指定です。代わりに同じ`[mcp_servers.godd-unslop]`直下で`env_vars = ["GODD_UNSLOP_CODEX"]`とすると、MCPを起動するCodex自身のローカル環境からその名前の値を転送します。その場合は、変数を設定した環境からCodexを起動してください。後から別シェルで設定しても起動済みホストの環境は変わりません。Claude Codeでは、当該サーバー定義の`env`オブジェクトへ`"GODD_UNSLOP_CODEX": "C:/Tools/Codex/codex.exe"`を指定します。Codexの`env_vars`をClaude Codeの設定へ流用しません。
+
+MCPサーバーと同じOSユーザー・ホーム・`CODEX_HOME`の条件で、登録した同じCodexの`login status`が`Logged in using ChatGPT`を返すことを起動側で確認してください。独自の`CODEX_HOME`などログイン先の選択に必要な環境変数がある場合は、同じ値を当該サーバーの`--env`／`env`（Codexでは`env_vars`も可）へ明示し、APIキーや認証ファイルの内容を設定へ転記しないでください。変更後はホストの手順でMCPサーバーを再起動し、`/mcp`で接続を確認します。実装も改稿ごとに同じCodexでログインを確認し、不成立なら改稿へ進みません。ここでの設定保存・事前確認は、実際の改稿や両ホストでの受入成功を意味しません。
+
+認証の事前確認と実改稿では、読む設定が異なります。`login status`は通常のユーザー設定を使いますが、改稿の`exec`には`--ignore-user-config`を付けます。ユーザー設定の`cli_auth_credentials_store`だけで`keyring`または`auto`を選び、資格情報がOSの資格情報ストアにだけある場合、ほかに有効な設定がなければ改稿側は既定のファイル保存先を使い、同じ実行ファイル・`CODEX_HOME`でも改稿できない可能性があります。
+このため、`login status`の成功は改稿時の認証・利用資格を保証しません。同じMCPサーバー環境から代表的な`unslop_rewrite`を実行し、改稿本文と結果を確認して初めて改稿を受け入れます。未確認なら改稿は未受入です。資格情報のコピー・移行や保存方式・権限・グローバル設定の変更を求める手順ではありません。[Codexの資格情報保存](https://learn.chatgpt.com/docs/auth#credential-storage)も参照してください。
+
+設定の詳細は[Codexのstdio環境設定](https://learn.chatgpt.com/docs/extend/mcp?surface=cli#stdio-servers)と[Claude Codeのstdio登録](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server)を参照してください。
 
 MCPの引数には`action`を含めず、表にある項目だけを渡してください。
 CLIの`dispatch`へJSONを渡す場合は、`action`に`rewrite`、`analyze`、`plan`、`compare`、`features`、`style_learn`、`style_review`のいずれかを指定します。
 
 `serve`はHTTPサーバーではなく、標準入力でMCPの要求を待つプログラムです。
 ターミナルから起動して何も表示されなくても、クライアントが接続するまでは通常の待機状態です。
+
+### 両アプリで同じ比較を試す
+
+`unslop_compare`は生成モデルや外部APIを呼ばない比較処理です。次の架空の同入力をCodex CLIとClaude Codeの両方で使い、MCPツール`unslop_compare`の結果をそれぞれ確認します。ホストとの対話自体の契約・利用枠とは区別してください。改稿機能`unslop_rewrite`はこの確認では呼びません。
+
+ツールへ渡す引数（`action`は付けません）:
+
+```json
+{"original":"3回です。","rewrite":"5回です。"}
+```
+
+両方の対話画面での依頼例:
+
+```text
+godd-unslopサーバーのunslop_compareを1回呼び出してください。
+originalは「3回です。」、rewriteは「5回です。」です。
+rewriteツールや別の生成処理は呼ばず、比較結果を返してください。
+```
+
+実装上の期待値は、`changed: true`、`numeric_fragments_changed: true`、`numeric_fragments_original: ["3回"]`、`numeric_fragments_rewrite: ["5回"]`、`semantic_equality: "not_established"`です。意味の一致を保証する結果ではありません。MCPでは成功応答の`content`にあるtextブロックをJSONとして読み、`isError: true`ではないことも確認します。会話の説明だけでなく、実際のツール呼び出しと引数・返却結果が同じかを確認してください。
+
+CLI単体の比較との対照には、UTF-8（BOMなし）で`compare-request.json`を作り、次の内容を保存します。
+
+```json
+{"action":"compare","original":"3回です。","rewrite":"5回です。"}
+```
+
+```sh
+godd-unslop dispatch compare-request.json
+```
+
+このコマンドは比較JSONを標準出力へ返します。両ホストのMCP比較結果でも、上記の主要フィールドが同じになることを確かめます。CLIの標準出力が得られただけでは、Codex／Claude Code経由でMCPが呼ばれた証拠にはなりません。
+確認記録には、同じ実行ファイルの版・配置、ホスト名・版、入力、ツール名、結果と確認日を残します。設定保存・一覧表示・接続・機能実行・両ホストでの同等結果を分け、未実施は未実施として扱います。
+
+公式の設定方法: [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Codex Skills](https://learn.chatgpt.com/docs/build-skills)、[Claude Code MCP](https://code.claude.com/docs/en/mcp)、[Claude Code Skills](https://code.claude.com/docs/en/skills)。
 
 ## 上限と終了コード
 
