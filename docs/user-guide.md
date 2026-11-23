@@ -29,6 +29,64 @@ godd-unslop --help
 
 この版の`rewrite`と`install-skill`を使うには、上記のインストールで実行ファイルを更新してください。古いバイナリには追加コマンドがありません。
 
+### Windowsで同じ実行ファイルを受け入れる
+
+WindowsのMSVC版をビルドする場合は、Rust 1.95以降に加え、MSVCのC/C++ビルドツールとWindows SDKを使える環境が必要です。この製品はSQLiteを同梱してビルドするため、対象アーキテクチャのDeveloper PowerShellなどでネイティブ依存をビルドできることも確認してください。別の製品が同じツールで成功した記録だけでは、今回の環境確認にはなりません。
+
+通常の導入は上の`cargo install --path . --locked`です。配布前のWindows受入では、対象ソースと`Cargo.lock`、Rust・C/C++ツールチェーン、Cargo設定・依存を固定します。次はx64 MSVC用の例です。別のアーキテクチャでは対応するWindows targetを一つ選び、以後も同じtargetとパッケージを使います。依存を準備済みのオフライン運用では`--offline`も指定します。
+
+```powershell
+$windowsTarget = 'x86_64-pc-windows-msvc'
+$manifestPath = (Resolve-Path -LiteralPath './Cargo.toml').ProviderPath
+$metadataLines = @(cargo metadata --locked --no-deps --format-version 1 --manifest-path $manifestPath)
+if ($LASTEXITCODE -ne 0) { throw 'Cargo metadata failed' }
+$metadata = ($metadataLines -join "`n") | ConvertFrom-Json
+$package = @($metadata.packages | Where-Object {
+    $_.name -ceq 'godd-unslop' -and
+    [IO.Path]::GetFullPath($_.manifest_path) -eq $manifestPath
+})
+if ($package.Count -ne 1) { throw 'Expected one local godd-unslop package' }
+$buildLines = @(cargo build --locked --release --package $package[0].id --bin godd-unslop --target $windowsTarget --manifest-path $manifestPath --message-format=json)
+if ($LASTEXITCODE -ne 0) { throw 'Cargo build failed' }
+$messages = @($buildLines | ForEach-Object { $_ | ConvertFrom-Json -ErrorAction Stop })
+$finished = @($messages | Where-Object { $_.reason -ceq 'build-finished' })
+if ($finished.Count -ne 1 -or $finished[0].success -ne $true) { throw 'Build did not finish successfully' }
+$artifacts = @($messages | Where-Object {
+    $_.reason -ceq 'compiler-artifact' -and $_.package_id -ceq $package[0].id -and
+    $_.target.name -ceq 'godd-unslop' -and $_.target.kind -contains 'bin' -and
+    $_.profile.test -eq $false -and $_.executable
+})
+if ($artifacts.Count -ne 1) { throw 'Executable is missing or ambiguous; do not choose the first one' }
+$unslopExe = (Resolve-Path -LiteralPath $artifacts[0].executable).ProviderPath
+$unslopSha256 = (Get-FileHash -LiteralPath $unslopExe -Algorithm SHA256).Hash
+$unslopBytes = (Get-Item -LiteralPath $unslopExe).Length
+& $unslopExe --version
+if ($LASTEXITCODE -ne 0) { throw 'Version check failed' }
+```
+
+`package_id`は対象のローカルmanifestへ結び、明示した単一Windows targetのビルドから実行ファイルを一件だけ選びます。複数候補や欠落は受け入れず、PATH上の同名旧版や先頭の候補で補いません。`CARGO_TARGET_DIR`やCargo設定で配置が変わっても、Cargoの`executable`から得た絶対パスを使います。ソース・target・パッケージID・絶対パス・サイズ・SHA-256を同じ受入記録へ残してください。
+
+ビルド済みの同じ実行ファイルを再利用する場合は、正式な製造・配布receiptで同ソース・パッケージ・Windows target・機能を確認し、その記録の期待SHA-256を後段と同じ`$unslopSha256`へ設定します。次の2つのプレースホルダーを、そのreceiptに対応する実ファイルの絶対パスと64桁SHA-256へ置き換えてください。既存セッションの変数やPATH上の同名ファイルを流用せず、実ファイルとの一致を確認してから版・CLI・両ホストのstdioへ進みます。
+
+```powershell
+$unslopExe = (Resolve-Path -LiteralPath '<正式receiptに対応する実ファイルの絶対パス>').ProviderPath
+$unslopSha256 = '<同じ正式receiptの64桁SHA-256>'
+if ($unslopSha256 -notmatch '\A[0-9a-fA-F]{64}\z') { throw 'Set the expected SHA-256 from the receipt' }
+$actualSha256 = (Get-FileHash -LiteralPath $unslopExe -Algorithm SHA256).Hash
+if ($actualSha256 -ne $unslopSha256) { throw 'Executable does not match the receipt' }
+$unslopBytes = (Get-Item -LiteralPath $unslopExe).Length
+& $unslopExe --version
+if ($LASTEXITCODE -ne 0) { throw 'Version check failed' }
+```
+
+導入先へ同じ成果物を反映した後も、`$unslopExe`だけを実際の導入先の絶対パスへ更新し、上の実SHA-256照合をもう一度行ってから進みます。`$unslopSha256`は同じreceiptの期待値のまま保持し、置換後の測定値で上書きしません。receiptや一致を確認できなければ、その成果物の受入は未成立です。受入だけのために作り直さず、`cargo install`もコンパイルするため、先のビルドに無条件に続けて重複実行しません。
+
+版確認、通常・strictのCLI比較、CodexとClaude Codeのstdio登録には、一貫して同じ`$unslopExe`を使います。PATH上に別版があっても裸のコマンドへ戻しません。導入先を置き換える場合は、既存の配布・更新手順で旧版の識別と権限を保ち、同じ受入済みバイトを反映した後に導入先の絶対パスと実SHA-256を照合し直します。更新失敗時はその手順のロールバックと子プロセスの終了を確認します。ハッシュ一致やビルド成功だけでは、実行資格・配布権限・両ホスト受入は成立しません。
+
+`--version`（`-V`も可）はパッケージ名と版を標準出力へ返し、入力読込み・改稿・接続を行いません。版文字列だけで同一ファイルと判断せず、未対応の旧実行ファイルを現在版として扱いません。
+
+Cargoの[artifact JSON](https://doc.rust-lang.org/cargo/reference/external-tools.html#artifact-messages)と[buildオプション](https://doc.rust-lang.org/cargo/commands/cargo-build.html)も参照してください。
+
 ## AIに文章を書いてもらうためのSkillを入れる
 
 最初の下書きから書き方を整えたい場合は、使っているAIアプリへSkillを導入します。
@@ -356,13 +414,13 @@ godd-unslop features --catalog
 ## MCPクライアントから使う
 
 Codex CLIとClaude Codeは、同じ`godd-unslop serve`を標準入出力（stdio）で起動できます。Skillの導入とは別に、それぞれのMCP設定へ登録します。
-まず、導入したネイティブ実行ファイルの絶対パスを確かめます。次のパスは例なので、実際の配置へ置き換えてください。既に同名サーバーを登録している場合は、現在のコマンドと引数を確認してから変更します。
+Windowsでは上で選んだ同一成果物の`$unslopExe`と実SHA-256を使います。macOS・Linuxの例はそのOS用の実際の配置へ置き換えます。既に同名サーバーを登録している場合は、現在のコマンドと引数を確認してから変更します。
 
 ### Codex CLIへ登録する
 
 ```powershell
 # Windows / PowerShell
-codex mcp add godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+codex mcp add godd-unslop -- $unslopExe serve
 codex mcp list
 ```
 
@@ -378,7 +436,7 @@ codex mcp list
 
 ```powershell
 # Windows / PowerShell
-claude mcp add --transport stdio godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+claude mcp add --transport stdio godd-unslop -- $unslopExe serve
 claude mcp list
 ```
 
@@ -391,7 +449,7 @@ claude mcp list
 Claude Codeのこの例は、既定のlocal scopeで現在のプロジェクトから使う登録です。チーム共有など別の範囲が必要な場合は、既存の設定と用途に合わせて公式手順のscopeを選びます。`claude`の対話画面では`/mcp`で接続状態とツールを確認します。
 
 両CLIとも`--`より後ろがサーバーのコマンドと引数です。空白を含む実行ファイルのパスは一つの引数として引用し、`serve`は別の引数にします。PowerShellの引用符をMCPの`command`値に埋め込んだり、`serve`をパスに連結したりしないでください。ネイティブの`godd-unslop.exe`を直接指定するので、Windowsの`.cmd`を起動するためのラッパーは不要です。
-登録コマンドの成功は設定の保存であり、接続や機能実行の成功とは別です。アプリが求める通常の信頼・ツール利用確認を行い、接続できない場合はパス・版・権限を調べます。
+登録後は両ホストの一覧・当該設定の`command`が同じ`$unslopExe`の絶対パスで、`args`が`["serve"]`であることを確認します。手書きTOML／JSONのパスもこの実値へ置き換え、現在の同名設定の優先順位・scopeを確認します。受入前後に同ファイルの実SHA-256が`$unslopSha256`と一致することを確認してください。登録コマンドの成功は設定の保存であり、接続や機能実行の成功とは別です。アプリが求める通常の信頼・ツール利用確認を行い、接続できない場合はパス・版・権限を調べます。
 
 ### その他のMCPクライアント
 
@@ -428,8 +486,8 @@ Claude Codeのこの例は、既定のlocal scopeで現在のプロジェクト�
 # Windows / PowerShell。パスは実際の配置へ置き換えます。
 $codexExe = 'C:/Tools/Codex/codex.exe'
 & $codexExe login status
-codex mcp add godd-unslop --env "GODD_UNSLOP_CODEX=$codexExe" -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
-claude mcp add --env "GODD_UNSLOP_CODEX=$codexExe" --transport stdio godd-unslop -- 'C:/Tools/GoDD Unslop/godd-unslop.exe' serve
+codex mcp add godd-unslop --env "GODD_UNSLOP_CODEX=$codexExe" -- $unslopExe serve
+claude mcp add --env "GODD_UNSLOP_CODEX=$codexExe" --transport stdio godd-unslop -- $unslopExe serve
 ```
 
 ```sh
@@ -457,6 +515,8 @@ MCPサーバーと同じOSユーザー・ホーム・`CODEX_HOME`の条件で、
 
 認証の事前確認と実改稿では、読む設定が異なります。`login status`は通常のユーザー設定を使いますが、改稿の`exec`には`--ignore-user-config`を付けます。ユーザー設定の`cli_auth_credentials_store`だけで`keyring`または`auto`を選び、資格情報がOSの資格情報ストアにだけある場合、ほかに有効な設定がなければ改稿側は既定のファイル保存先を使い、同じ実行ファイル・`CODEX_HOME`でも改稿できない可能性があります。
 このため、`login status`の成功は改稿時の認証・利用資格を保証しません。同じMCPサーバー環境から代表的な`unslop_rewrite`を実行し、改稿本文と結果を確認して初めて改稿を受け入れます。未確認なら改稿は未受入です。資格情報のコピー・移行や保存方式・権限・グローバル設定の変更を求める手順ではありません。[Codexの資格情報保存](https://learn.chatgpt.com/docs/auth#credential-storage)も参照してください。
+
+WindowsでMCPクライアントを別ユーザーやサービスとして起動すると、同じパスでもユーザープロファイルやOSの資格情報ストアへアクセスできる条件が変わります。通常の対話ユーザーと、登録先ホストが実際に使う起動ユーザー・環境を区別してください。Codex CLIから使えたことをClaude Codeの成功に流用せず、両方から同じ受入済み`godd-unslop`で比較と代表改稿を確認します。設定保存や接続だけの記録、合成テストの応答、改稿が`needs_context`で終わった結果を、実改稿や文章品質の受入へ数えません。
 
 設定の詳細は[Codexのstdio環境設定](https://learn.chatgpt.com/docs/extend/mcp?surface=cli#stdio-servers)と[Claude Codeのstdio登録](https://code.claude.com/docs/en/mcp#option-3-add-a-local-stdio-server)を参照してください。
 
@@ -492,11 +552,27 @@ CLI単体の比較との対照には、UTF-8（BOMなし）で`compare-request.j
 {"action":"compare","original":"3回です。","rewrite":"5回です。"}
 ```
 
-```sh
-godd-unslop dispatch compare-request.json
+```powershell
+# Windowsでは版確認・両ホスト登録と同じ絶対パスを使います。
+& $unslopExe dispatch compare-request.json
+if ($LASTEXITCODE -ne 0) { throw 'Normal comparison failed' }
+& {
+    # strictの予定終了1を、この子スコープだけで明示的に検査します。
+    $PSNativeCommandUseErrorActionPreference = $false
+    & $unslopExe dispatch compare-request.json --strict
+    $strictExit = $LASTEXITCODE
+    if ($strictExit -ne 1) { throw 'Expected strict comparison exit 1' }
+}
+if ((Get-FileHash -LiteralPath $unslopExe -Algorithm SHA256).Hash -ne $unslopSha256) {
+    throw 'Accepted executable changed'
+}
 ```
 
-このコマンドは比較JSONを標準出力へ返します。両ホストのMCP比較結果でも、上記の主要フィールドが同じになることを確かめます。CLIの標準出力が得られただけでは、Codex／Claude Code経由でMCPが呼ばれた証拠にはなりません。
+strictの呼出しは`& { ... }`で子スコープを作り、その中だけ`$PSNativeCommandUseErrorActionPreference`を`$false`にします。PowerShell 7.4以降で外側が`$true`かつ`$ErrorActionPreference = 'Stop'`でも、予定終了1を直後に検査でき、0や2など別の終了値は失敗として止めます。ブロック終了・例外時には外側のnative設定へ戻り、通常比較や後続コマンドには影響しません。`$ErrorActionPreference`やプロファイルを変更する手順ではありません。[Microsoftのnative終了コード設定](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_preference_variables#psnativecommanduseerroractionpreference)も参照してください。
+
+macOS・Linuxでは、そのOSで確認した同一実行ファイルの絶対パスを引用して`dispatch compare-request.json`と`dispatch compare-request.json --strict`を実行します。
+
+このコマンドは終了コード0で比較JSONを標準出力へ返します。`--strict`を追加した場合は、この入力には差があるため終了コード1で、同じ比較JSONを返します。入力不備は終了コード2で理由を標準エラー出力へ返すので、JSONとして読む前に終了コードと標準出力・標準エラー出力を分けて確認します。両ホストのMCP比較結果でも、上記の主要フィールドが同じになることを確かめます。CLIの標準出力が得られただけでは、Codex／Claude Code経由でMCPが呼ばれた証拠にはなりません。
 確認記録には、同じ実行ファイルの版・配置、ホスト名・版、入力、ツール名、結果と確認日を残します。設定保存・一覧表示・接続・機能実行・両ホストでの同等結果を分け、未実施は未実施として扱います。
 
 公式の設定方法: [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Codex Skills](https://learn.chatgpt.com/docs/build-skills)、[Claude Code MCP](https://code.claude.com/docs/en/mcp)、[Claude Code Skills](https://code.claude.com/docs/en/skills)。

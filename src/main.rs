@@ -24,7 +24,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if matches!(command, "help" | "--help" | "-h") {
         println!(
-            "godd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop rewrite [JSON_FILE|-]\ngodd-unslop install-skill SKILLS_ROOT\ngodd-unslop relationship-put [JSON_FILE|-]\ngodd-unslop relationship-get|relationship-delete ID\ngodd-unslop relationship-list\ngodd-unslop rewrite-for|context-for ID [JSON_FILE|-]\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コードは、成功時が0、--strictで候補がある場合が1、入力エラー時が2です。"
+            "godd-unslop --version\ngodd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop rewrite [JSON_FILE|-]\ngodd-unslop install-skill SKILLS_ROOT\ngodd-unslop relationship-put [JSON_FILE|-]\ngodd-unslop relationship-get|relationship-delete ID\ngodd-unslop relationship-list\ngodd-unslop rewrite-for|context-for ID [JSON_FILE|-]\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コードは、成功時が0、--strictで候補がある場合が1、入力エラー時が2です。"
         );
         return Ok(0);
     }
@@ -156,8 +156,23 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     );
     Ok(u8::from(strict && flagged))
 }
+fn main() -> ExitCode {
+    let mut raw_args = std::env::args_os().skip(1);
+    if raw_args
+        .next()
+        .is_some_and(|arg| arg == "--version" || arg == "-V")
+    {
+        if raw_args.next().is_some() {
+            eprintln!("版の確認には--versionまたは-Vだけを指定してください。");
+            return ExitCode::from(2);
+        }
+        println!("{} {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+        return ExitCode::SUCCESS;
+    }
+    run_application()
+}
 #[tokio::main]
-async fn main() -> ExitCode {
+async fn run_application() -> ExitCode {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if args.first().is_some_and(|s| s == "serve") {
         if args.len() != 1 {
