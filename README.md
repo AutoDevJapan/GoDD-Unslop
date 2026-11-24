@@ -54,7 +54,9 @@ $godd-unslop
 
 ## 手元の文章をAIで書き直す
 
-CLIから改稿を受け取るには`rewrite`を使います。ChatGPTサブスクでログインしたCodex CLIが必要で、APIキーは使いません。実行ファイルの指定や認証の確認は[AI改稿の手順](docs/user-guide.md#codex-cliで文章を書き直す)を参照してください。
+CLIから改稿を受け取るには`rewrite`を使います。
+
+ChatGPTサブスクでログインしたCodex CLIが必要で、APIキーは使いません。実行ファイルの指定や認証の確認は[AI改稿の手順](docs/user-guide.md#codex-cliで文章を書き直す)を参照してください。
 
 次の内容をUTF-8の`rewrite-request.json`に保存します。
 
@@ -130,7 +132,7 @@ godd-unslop compare article.txt revised.txt
 この修正を登録すると、同じ語句の並びが出てきたときに、改行を入れる案が返ります。
 文章の意味を理解して、どんな文章にも同じように応用できる段階ではありません。
 
-修正例の登録には`style-learn`、登録した内容で文章を確認するには`style-review`を使います。
+修正例の登録には`style-learn`、登録した内容で文章を確認するには`style-review`を使います。\
 [設定の保存・再利用の手順](docs/user-guide.md#改行と空行を修正例から学ぶ)に、コピーして使える例を載せています。
 
 会話から自動で覚えたり、設定を自動保存したりはしないため、次回も使いたい設定はファイルに保存してください。
@@ -147,7 +149,7 @@ MCPを使う場合は、対応するアプリに`godd-unslop serve`を登録し�
 
 MCPを使うアプリのログインと、`unslop_rewrite`が使うCodexのChatGPTログインは別です。
 
-Rustから使う場合は、`analyze`、`plan`、`compare`、`features`、`style::learn`、`style::review`、`rewrite::run`を利用できます。
+Rustから使う場合は、`analyze`、`plan`、`compare`、`features`、`style::learn`、`style::review`、`rewrite::run`を利用できます。\
 MCPが不要なら、依存関係の指定に`default-features = false`を付けられます。
 
 ## 詳しい仕様を調べる
