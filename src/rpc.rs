@@ -59,7 +59,9 @@ mod transport {
     struct WritingServer;
     impl ServerHandler for WritingServer {
         fn get_info(&self) -> ServerConfig {
+            let identity = Implementation::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
             ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+                .with_server_info(identity)
                 .with_instructions(
                     "指定された文章や修正例を分析し、確認する箇所や推敲の手順を返します。\n作者の判定は行いません。unslop_rewriteは明示入力を書き換えます。意味の一致は保証しません。",
                 )
