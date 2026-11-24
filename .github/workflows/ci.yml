@@ -13,10 +13,44 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        env:
+          GIT_CONFIG_COUNT: ${{ runner.os == 'Windows' && '1' || '0' }}
+          GIT_CONFIG_KEY_0: core.autocrlf
+          GIT_CONFIG_VALUE_0: 'true'
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --all-targets --locked
+      - name: Check installed Skill bytes
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $path = 'docs/distribution/godd-unslop-SKILL.md'
+          $root = Join-Path $env:RUNNER_TEMP ("godd-unslop-skill-" + [guid]::NewGuid())
+          $null = New-Item -ItemType Directory -Path $root -ErrorAction Stop
+          try {
+            $blob = Join-Path $root 'expected.bin'
+            # pwsh 7.4+ redirects native stdout directly to bytes.
+            git cat-file blob "HEAD:$path" > $blob
+            if ($LASTEXITCODE -ne 0) { throw "Cannot read HEAD:$path" }
+
+            & ./target/debug/godd-unslop.exe install-skill $root
+            if ($LASTEXITCODE -ne 0) { throw 'install-skill failed' }
+
+            $expected = [IO.File]::ReadAllBytes($blob)
+            $installed = Join-Path $root 'godd-unslop/SKILL.md'
+            $checkedOut = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $path).Path)
+            $written = [IO.File]::ReadAllBytes($installed)
+            Write-Host "Bytes: blob=$($expected.Length), checkout=$($checkedOut.Length), installed=$($written.Length)"
+            if (-not [Linq.Enumerable]::SequenceEqual[byte]($expected, $written)) {
+              throw "Installed SKILL.md differs from HEAD:$path"
+            }
+            if (-not [Linq.Enumerable]::SequenceEqual[byte]($expected, $checkedOut)) {
+              throw "Checked-out $path differs from its Git blob"
+            }
+          } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force
+          }
       - run: cargo test --no-default-features --locked
