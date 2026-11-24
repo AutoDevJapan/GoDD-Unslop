@@ -494,7 +494,8 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
         &mut input,
         json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"integration-test","version":"1"}}}),
     );
-    assert!(receive(&mut output, 1)["result"]["capabilities"]["tools"].is_object());
+    let init = receive(&mut output, 1);
+    assert!(init["result"]["capabilities"]["tools"].is_object());
     send(
         &mut input,
         json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
@@ -569,6 +570,11 @@ fn mcp_handshake_and_every_tool_use_the_shipped_process() {
     assert!(receive(&mut output, 10)["error"].is_object());
     drop(input);
     assert!(child.wait().unwrap().success());
+
+    assert_eq!(init["result"]["protocolVersion"], "2025-11-25");
+    let server_info = &init["result"]["serverInfo"];
+    assert_eq!(server_info["name"], env!("CARGO_PKG_NAME"), "{server_info}");
+    assert_eq!(server_info["version"], env!("CARGO_PKG_VERSION"));
 }
 
 #[test]
