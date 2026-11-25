@@ -37,6 +37,7 @@ godd-unslop analyze article.txt
 ## AIに最初から文章を書いてもらう
 
 普段使うAIにSkillを読み込ませると、下書きから理由と結論のつながりや話題ごとの段落を意識して書くよう指示できます。
+
 文章を書くAI自身が方針を使うため、Skillから別のAIを呼ぶ必要はありません。モデルの再学習や日本語の品質保証を行うものではありません。
 
 使うアプリのSkillルートフォルダーを`install-skill`の引数に指定すると、その下に`godd-unslop/SKILL.md`が保存されます。保存先と使い始め方は[導入手順](docs/user-guide.md#aiに文章を書いてもらうためのskillを入れる)で確認できます。
@@ -54,7 +55,7 @@ $godd-unslop
 
 ## 手元の文章をAIで書き直す
 
-CLIから改稿を受け取るには`rewrite`を使います。
+`rewrite`はCodex CLIを通じて原文と指定した補助設定をChatGPTへ送り、改稿を受け取ります。
 
 ChatGPTサブスクでログインしたCodex CLIが必要で、APIキーは使いません。実行ファイルの指定や認証の確認は[AI改稿の手順](docs/user-guide.md#codex-cliで文章を書き直す)を参照してください。
 
@@ -129,7 +130,7 @@ godd-unslop compare article.txt revised.txt
 次に確認します。
 ```
 
-この修正を登録すると、同じ語句の並びが出てきたときに、改行を入れる案が返ります。
+この修正を登録すると、同じ語句の並びが出てきたときに、改行を入れる案が返ります。\
 文章の意味を理解して、どんな文章にも同じように応用できる段階ではありません。
 
 修正例の登録には`style-learn`、登録した内容で文章を確認するには`style-review`を使います。\
@@ -143,7 +144,8 @@ godd-unslop compare article.txt revised.txt
 
 コマンドのほか、MCPに対応したAIツールやRustで作ったアプリからも呼び出せます。
 
-分析・比較と修正例の照合は生成モデルを呼び出しません。`rewrite`はCodex CLIを通じて原文をChatGPTへ送り、改稿を受け取ります。
+分析・比較と修正例の照合は生成モデルを呼び出しません。\
+`rewrite`はCodex CLIを通じて原文をChatGPTへ送り、改稿を受け取ります。
 
 MCPを使う場合は、対応するアプリに`godd-unslop serve`を登録します。Codex CLIとClaude Codeそれぞれの登録・接続確認と、生成モデルを呼ばない`unslop_compare`を同じ入力で試す手順は、[ユーザーガイドのMCP設定](docs/user-guide.md#mcpクライアントから使う)を参照してください。
 
