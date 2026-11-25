@@ -24,7 +24,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     let command = args.first().map(String::as_str).unwrap_or("help");
     if matches!(command, "help" | "--help" | "-h") {
         println!(
-            "godd-unslop --version\ngodd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop rewrite [JSON_FILE|-]\ngodd-unslop install-skill SKILLS_ROOT\ngodd-unslop relationship-put [JSON_FILE|-]\ngodd-unslop relationship-get|relationship-delete ID\ngodd-unslop relationship-list\ngodd-unslop rewrite-for|context-for ID [JSON_FILE|-]\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コードは、成功時が0、--strictで候補がある場合が1、入力エラー時が2です。"
+            "godd-unslop --version\ngodd-unslop analyze|plan|features [FILE|-] [--json] [--strict]\ngodd-unslop compare ORIGINAL REWRITE [--json] [--strict]\ngodd-unslop style-learn|style-review [JSON_FILE|-]\ngodd-unslop dispatch [JSON_FILE|-]\ngodd-unslop rewrite [JSON_FILE|-]\ngodd-unslop install-skill SKILLS_ROOT\ngodd-unslop relationship-put [JSON_FILE|-]\ngodd-unslop relationship-get|relationship-delete ID\ngodd-unslop relationship-list\ngodd-unslop rewrite-for|context-for ID [JSON_FILE|-]\ngodd-unslop serve\nファイルを省略すると、標準入力から読み込みます。\nfeaturesで機能の一覧だけを表示する場合は、--catalogを指定してください。\n\n終了コード\n  0  正常に終了しました。\n  1  --strict を指定したときに、指摘または比較の差分がありました。\n  2  入力に誤りがあるか、実行に失敗しました。"
         );
         return Ok(0);
     }

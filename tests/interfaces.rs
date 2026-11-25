@@ -21,7 +21,7 @@ fn cli(args: &[&str], text: &[u8]) -> std::process::Output {
 fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
     let (root, fixture) = codex_fixture();
     let _cleanup = Cleanup(root.clone());
-    let result = rewrite_with_fixture(&fixture, &root, "none");
+    let result = rewrite_with_fixture(&fixture, &root, "capture-prompt");
     assert!(
         result.status.success(),
         "contract field: {}; {}",
@@ -32,6 +32,10 @@ fn rewrite_sends_explicit_model_effort_and_speed_to_the_trusted_process() {
     let result: Value = serde_json::from_slice(&result.stdout).unwrap();
     assert_eq!(result["status"], "rewritten");
     assert_eq!(result["rewritten_text"], "保存しました。");
+
+    let received = std::fs::read_to_string(root.join("rewrite-prompt.txt")).unwrap();
+    let input = json!({"action":"rewrite","text":"保存しました。"});
+    assert_eq!(received, godd_unslop::rewrite::prepare(&input).unwrap());
 }
 
 struct Cleanup(std::path::PathBuf);
@@ -466,6 +470,117 @@ fn cli_uses_real_exit_codes_and_rejects_non_utf8() {
         serde_json::from_slice(&cli(&["features"], "資料を保存しました。".as_bytes()).stdout)
             .unwrap();
     assert!(parsed["metrics"]["visible_characters"].as_u64().unwrap() > 0);
+}
+
+fn guide_example_json(args: &[&str]) -> Value {
+    let output = cli(args, &[]);
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{args:?}: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.stderr.is_empty(), "{args:?} wrote to stderr");
+    serde_json::from_slice(&output.stdout).expect("guide command must return one JSON value")
+}
+
+#[test]
+fn cli_analyzes_and_compares_the_distributed_guide_texts() {
+    const ARTICLE: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/docs/guide-examples/article.txt"
+    );
+    const REVISED: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/docs/guide-examples/revised.txt"
+    );
+    let article = std::fs::read_to_string(ARTICLE).unwrap();
+    let revised = std::fs::read_to_string(REVISED).unwrap();
+
+    let term = "既定";
+    let start = article.find(term).expect("article.txt must contain 既定");
+    let end = start + term.len();
+    let analysis = guide_example_json(&["analyze", ARTICLE]);
+    let findings = analysis["findings"].as_array().unwrap();
+    let found = findings.iter().any(|finding| {
+        finding["rule"] == "reader.ambiguous_term"
+            && finding["start"]["byte"] == start
+            && finding["end"]["byte"] == end
+            && finding["start"]["character"] == article[..start].chars().count()
+            && finding["end"]["character"] == article[..end].chars().count()
+    });
+    assert!(
+        found,
+        "analyze must flag 既定 at bytes {start}..{end}: {analysis}"
+    );
+
+    let revised_analysis = guide_example_json(&["analyze", REVISED]);
+    assert!(
+        revised_analysis["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|finding| finding["rule"] != "reader.ambiguous_term"),
+        "revised.txt still has an ambiguous term"
+    );
+
+    let comparison = guide_example_json(&["compare", ARTICLE, REVISED]);
+    assert_eq!(comparison["changed"], true);
+    assert_eq!(comparison["semantic_equality"], "not_established");
+    let changed_byte = |position: &str| {
+        let byte = comparison["changed_region"][position]["byte"]
+            .as_u64()
+            .unwrap();
+        usize::try_from(byte).unwrap()
+    };
+    for (text, start, end, term) in [
+        (&article, "original_start", "original_end", term),
+        (&revised, "rewrite_start", "rewrite_end", "経費"),
+    ] {
+        assert!(
+            text.get(changed_byte(start)..changed_byte(end))
+                .is_some_and(|span| span.contains(term)),
+            "compare must include {term} in the changed region"
+        );
+    }
+    assert_eq!(
+        guide_example_json(&["compare", ARTICLE, ARTICLE])["changed"],
+        false
+    );
+    assert_eq!(std::fs::read_to_string(ARTICLE).unwrap(), article);
+    assert_eq!(std::fs::read_to_string(REVISED).unwrap(), revised);
+}
+
+#[test]
+fn cli_learns_and_reviews_the_distributed_style_examples() {
+    const LEARN: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/docs/guide-examples/learn-request.json"
+    );
+    const REVIEW: &str = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/docs/guide-examples/style-review-request.json"
+    );
+    let request: Value = serde_json::from_slice(&std::fs::read(REVIEW).unwrap()).unwrap();
+    let learned = guide_example_json(&["style-learn", LEARN]);
+    assert_eq!(learned["ignored_examples"], 0);
+    assert_eq!(learned["profile"], request["profile"]);
+
+    let report = guide_example_json(&["style-review", REVIEW]);
+    let findings = report["findings"].as_array().unwrap();
+    for (spacing, whitespace, blank_lines) in
+        [("line_break", "\n", 0), ("paragraph_distance", "\n\n", 1)]
+    {
+        let choices = json!([{
+            "spacing": spacing,
+            "whitespace": whitespace,
+            "blank_lines": blank_lines,
+        }]);
+        let found = findings.iter().any(|finding| {
+            finding["kind"] == "layout_boundary" && finding["choices"] == choices
+        });
+        assert!(found, "style-review must report {spacing}");
+    }
 }
 
 #[test]

@@ -1,7 +1,7 @@
 {
-  "text": "確認を実施しました。結果は問題なしです。",
+  "text": "今月の領収書は既定のフォルダーに保存してください。",
   "context": {
-    "purpose": "確認結果の報告",
+    "purpose": "上司に渡す書類で、今月の領収書の保存先を伝える。チームで決めた保存先は「経費」フォルダー。",
     "recipient": {"relation": "superior", "closeness": "normal"},
     "register": "formal",
     "channel": "report",

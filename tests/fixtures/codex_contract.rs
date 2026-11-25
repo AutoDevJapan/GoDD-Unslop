@@ -36,6 +36,11 @@ fn main() {
     io::stdin().read_to_string(&mut prompt).unwrap();
     if !prompt.contains("保存しました。") { process::exit(8); }
     let mode = env::var("UNSLOP_TEST_WARNING_MODE").unwrap_or_default();
+    if mode == "capture-prompt" {
+        use std::io::Write;
+        let path = env::current_exe().unwrap().with_file_name("rewrite-prompt.txt");
+        std::fs::File::create_new(path).unwrap().write_all(prompt.as_bytes()).unwrap();
+    }
     if matches!(mode.as_str(), "json" | "mixed" | "fail" | "empty") {
         for _ in 0..2 {
             println!(r#"{{"type":"item.completed","item":{{"type":"error","message":"Exceeded skills context budget. All skill descriptions were removed and 399 additional skills were not included in the model-visible skills list."}}}}"#);
