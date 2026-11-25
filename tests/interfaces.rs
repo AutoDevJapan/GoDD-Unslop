@@ -576,9 +576,9 @@ fn cli_learns_and_reviews_the_distributed_style_examples() {
             "whitespace": whitespace,
             "blank_lines": blank_lines,
         }]);
-        let found = findings.iter().any(|finding| {
-            finding["kind"] == "layout_boundary" && finding["choices"] == choices
-        });
+        let found = findings
+            .iter()
+            .any(|finding| finding["kind"] == "layout_boundary" && finding["choices"] == choices);
         assert!(found, "style-review must report {spacing}");
     }
 }
