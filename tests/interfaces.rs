@@ -568,18 +568,26 @@ fn cli_learns_and_reviews_the_distributed_style_examples() {
 
     let report = guide_example_json(&["style-review", REVIEW]);
     let findings = report["findings"].as_array().unwrap();
-    for (spacing, whitespace, blank_lines) in
-        [("line_break", "\n", 0), ("paragraph_distance", "\n\n", 1)]
-    {
+    let text = request["text"].as_str().unwrap();
+    let paragraph = text.find("\n資料を").unwrap();
+    let condition = text.find("難しい場合").unwrap();
+    assert_eq!(findings.len(), 2);
+    for (spacing, whitespace, blank_lines, start, end) in [
+        ("paragraph_distance", "\n\n", 1, paragraph, paragraph + 1),
+        ("line_break", "\n", 0, condition, condition),
+    ] {
         let choices = json!([{
             "spacing": spacing,
             "whitespace": whitespace,
             "blank_lines": blank_lines,
         }]);
-        let found = findings
-            .iter()
-            .any(|finding| finding["kind"] == "layout_boundary" && finding["choices"] == choices);
-        assert!(found, "style-review must report {spacing}");
+        let found = findings.iter().any(|finding| {
+            finding["kind"] == "layout_boundary"
+                && finding["start"]["byte"] == start
+                && finding["end"]["byte"] == end
+                && finding["choices"] == choices
+        });
+        assert!(found, "expected {spacing} at bytes {start}..{end}");
     }
 }
 
