@@ -15,7 +15,7 @@ godd-unslop analyze article.txt
 指摘した箇所と理由をJSONで返します。\
 このコマンドは原稿を外部に送りません。
 
-[インストールと使い方](docs/user-guide.md)
+[インストールと使い方（公式Wiki）](https://github.com/AutoDevJapan/GoDD-Unslop/wiki)
 
 ## ライセンス
 
