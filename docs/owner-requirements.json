@@ -1,5 +1,5 @@
 {
-  "description": "オーナーの指示から抽象化した要件。元文章・会社名・顧客名・社内情報を含めない。",
+  "description": "オーナーの文章改善指示から整理した要件。",
   "rules": [
     {
       "confidence": "explicit",

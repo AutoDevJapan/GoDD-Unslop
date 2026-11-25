@@ -207,7 +207,7 @@ fn nested_and_formatted_wrapped_quotes_remain_protected() {
 }
 
 #[test]
-fn prompt_reuses_skill_layout_guidance_without_universal_rules() {
+fn prompt_reuses_the_skills_visible_line_and_paragraph_breaks() {
     let prompt = prepare(&json!({"text":"確認しました。次に進みます。"})).unwrap();
     let guidance = godd_unslop::skill::layout_guidance();
     assert!(
@@ -216,29 +216,16 @@ fn prompt_reuses_skill_layout_guidance_without_universal_rules() {
     );
     let skill = godd_unslop::skill::CONTENT.replace("\r\n", "\n");
     assert!(skill.contains(&guidance));
-    // Ordinary line breaks and blank-line distance are separate concepts.
-    for needle in [
-        "改行は、同じ話題の中",
-        "空行は、話題や段落が変わる距離",
-        "原文に意図した改行や空行があれば尊重",
-    ] {
-        assert!(guidance.contains(needle), "{needle}");
-    }
-    // Real multi-line illustrations: blank line distance and ordinary newline both remain.
-    assert!(guidance.contains("確認は終わり、結果に問題はありません。\n\n次の案件を説明します。\n担当者は火曜日までに資料を用意します。"));
-    assert!(
-        guidance
-            .contains("料金は変わりません。\n\n解約は設定画面から行えます。\n\n不明な点があれば")
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, pulldown_cmark::Parser::new(&guidance));
+    // The condition and its outcome share a sentence. The note has a visible break,
+    // and changing notification settings starts a new paragraph.
+    let example = concat!(
+        "保存先を変えると、次回から新しいフォルダーに保存されます。<br />\n",
+        "これまでのファイルは元の場所に残ります。</p>\n",
+        "<p>通知を止めるには、設定画面で「通知」をオフにしてください。</p>",
     );
-    // Neither "always join" nor "break at every full stop" may be stated as a rule.
-    for forbidden in [
-        "句点ごとの機械的な分割や一律の空行追加はしない",
-        "すべての句点で改行する",
-        "全体を一文にまとめる",
-        "必ず空行を入れる",
-    ] {
-        assert!(!prompt.contains(forbidden), "{forbidden}");
-    }
+    assert!(html.contains(example));
 }
 #[test]
 fn layout_warnings_distinguish_line_break_and_blank_line_distance() {
@@ -652,10 +639,14 @@ fn prompt_shares_register_and_nuance_guidance_with_the_skill() {
     assert!(prompt.contains("です・ます調で結論を先に置く"));
     assert!(prompt.contains("参考例の事実・名前・数値は本文へ持ち込まない"));
     let nuance = godd_unslop::skill::nuance_guidance();
-    // Context-dependent, never a blanket replacement.
-    assert!(nuance.contains("すべての文に「については」を付けない"));
-    assert!(nuance.contains("文脈が支える場合だけ"));
-    assert!(nuance.contains("予定を完了に、完了を予定に変えない"));
+    // A reader's task, the app's response and a permission have different subjects.
+    for example in [
+        "入力欄に `$godd-unslop` と書き、次の行に頼みたいことを書いてください。",
+        "アプリが結果を表示します",
+        "編集者だけが下書きを公開できます",
+    ] {
+        assert!(nuance.contains(example), "{example}");
+    }
     let register = godd_unslop::skill::register_guidance();
     assert!(register.contains("ため口の原文を、依頼なしにです・ます調へ直さない"));
     assert!(register.contains("想像で作らない"));
