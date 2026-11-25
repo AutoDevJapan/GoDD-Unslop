@@ -55,7 +55,7 @@ $godd-unslop
 
 ## 手元の文章をAIで書き直す
 
-CLIから改稿を受け取るには`rewrite`を使います。
+`rewrite`はCodex CLIを通じて原文と指定した補助設定をChatGPTへ送り、改稿を受け取ります。
 
 ChatGPTサブスクでログインしたCodex CLIが必要で、APIキーは使いません。実行ファイルの指定や認証の確認は[AI改稿の手順](docs/user-guide.md#codex-cliで文章を書き直す)を参照してください。
 
