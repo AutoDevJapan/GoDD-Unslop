@@ -10,6 +10,10 @@ fn section(name: &str) -> String {
     let end = content.find(&end_marker).expect("guidance end");
     content[start..end].trim().to_string()
 }
+/// Version and edition wording shared by the Skill and the rewrite prompt.
+pub(crate) fn version_wording_guidance() -> String {
+    section("version-wording")
+}
 /// Line-break and blank-line guidance shared by the Skill and the rewrite prompt.
 pub fn layout_guidance() -> String {
     section("layout")

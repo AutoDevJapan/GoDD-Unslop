@@ -655,6 +655,42 @@ fn prompt_shares_register_and_nuance_guidance_with_the_skill() {
     assert!(skill.contains("調べれば分かることを聞かない"));
 }
 #[test]
+fn rewrite_prompt_applies_the_skills_version_wording() {
+    let prompt = prepare(&json!({"text":"設定を確認しました。"})).unwrap();
+    let skill = godd_unslop::skill::CONTENT;
+    for phrase in [
+        "ソフトウェアや仕様のバージョンを述べるときは「バージョン」と書く",
+        "バージョン2.4.1",
+        "編集部版",
+        "最新版",
+        "改訂第3版",
+        "版数",
+        "引用、コード、URL",
+        "前後を読んでも意味がはっきりしない箇所は、原文の表記を保つ",
+    ] {
+        assert!(skill.contains(phrase), "missing from the Skill: {phrase}");
+        assert!(prompt.contains(phrase), "missing from the prompt: {phrase}");
+    }
+}
+
+#[test]
+fn version_wording_keeps_edition_labels_and_protected_text() {
+    let original = "アプリを2.4.1版に更新しました。編集部版と最新版を照合しました。操作ガイドの改訂第3版を参照しました。配布した版数は2です。メモには「アプリの2.4.1版を使う」とあります。コマンドの表示は`2.4.1版`です。";
+    let request = json!({"text":original});
+    let revised = original.replacen("2.4.1版", "バージョン2.4.1", 1);
+    let result = finish(&request, &revised).unwrap();
+    assert_eq!(result["rewritten_text"], revised);
+    assert!(
+        finish(
+            &request,
+            &revised.replace("アプリの2.4.1版", "アプリのバージョン2.4.1")
+        )
+        .is_err()
+    );
+    assert!(finish(&request, &revised.replace("`2.4.1版`", "`バージョン2.4.1`")).is_err());
+}
+
+#[test]
 fn nuance_warnings_flag_added_or_removed_certainty_and_viewpoint() {
     let original = "次の案件を説明します。担当者は火曜日までに資料を用意します。";
     let request = json!({"text":original});
